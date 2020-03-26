@@ -23,6 +23,9 @@ set -u
 # Move into the folder that contains this script
 cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" || exit 1
 
+# Make sure the user has zstd installed
+command -v zstd &>/dev/null || die "zstd could not be found on your system, please install it!"
+
 # Generate list of configs to build
 CONFIGS=()
 [[ ${#} -eq 0 ]] && die "Please specify the configs that you want to build as parameters to this script!"
@@ -75,6 +78,6 @@ for CONFIG in "${CONFIGS[@]}"; do
     IMAGES=( "output/images/rootfs.cpio" )
     for IMAGE in "${IMAGES[@]}"; do
         [[ -f ${IMAGE} ]] || die "${IMAGE} could not be found! Did the build error?"
-        cp -v "${IMAGE}" "${IMAGES_FOLDER}"
+        zstd -19 "${IMAGE}" -o "${IMAGES_FOLDER}/${IMAGE##*/}.zst" || die "Compressing ${IMAGE##*/} failed!"
     done
 done
