@@ -25,6 +25,7 @@ cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" || exit 1
 
 # Generate list of configs to build
 CONFIGS=()
+[[ ${#} -eq 0 ]] && die "Please specify the configs that you want to build as parameters to this script!"
 while (( ${#} )); do
     case ${1} in
         all) for CONFIG in *.config; do CONFIGS+=( "../${CONFIG}" ); done ;;
