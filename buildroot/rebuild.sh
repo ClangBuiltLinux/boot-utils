@@ -35,8 +35,8 @@ while (( ${#} )); do
     shift
 done
 
-# Download latest buildroot release
-BUILDROOT_VERSION=2019.02.3
+# Download latest LTS buildroot release
+BUILDROOT_VERSION=2020.02
 if [[ -d src ]]; then
     if [[ $(cd src && make print-version | cut -d - -f 1 2>/dev/null) != "${BUILDROOT_VERSION}" ]]; then
         rm -rf src
