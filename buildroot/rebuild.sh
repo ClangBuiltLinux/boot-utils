@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 # Takes a list of architectures to build images for as the parameter
 
+# Prints an error message in bold red then exits
+function die() {
+    printf "\n\033[01;31m%s\033[0m\n" "${1}"
+    exit 1
+}
+
 function download_br() {
     mkdir -p src
     TARBALL=buildroot-${BUILDROOT_VERSION}.tar.gz
     rm -f "${TARBALL}"
     curl -LO https://buildroot.org/downloads/"${TARBALL}"
-    if ! sha256sum --quiet -c "${TARBALL}".sha256; then
-        echo "Downloaded tarball's hash does not match known good one! Please try redownloading."
-        exit 1
-    fi
+    sha256sum --quiet -c "${TARBALL}".sha256 || die "Downloaded tarball's hash does not match known good one! Please try redownloading."
     tar -xzf "${TARBALL}" -C src --strip-components=1
     rm -f "${TARBALL}"
 }
@@ -26,7 +29,7 @@ while (( ${#} )); do
     case ${1} in
         all) for CONFIG in *.config; do CONFIGS+=( "../${CONFIG}" ); done ;;
         arm64|arm|mips|mipsel|ppc32|ppc64|ppc64le|x86_64) CONFIGS+=( "../${1}.config" ) ;;
-        *) echo "Unknown parameter '${1}', exiting!"; exit 1 ;;
+        *) die "Unknown parameter '${1}', exiting!" ;;
     esac
     shift
 done
@@ -70,10 +73,7 @@ for CONFIG in "${CONFIGS[@]}"; do
     # Make sure images exist before moving them
     IMAGES=( "output/images/rootfs.cpio" )
     for IMAGE in "${IMAGES[@]}"; do
-        if [[ ! -f ${IMAGE} ]]; then
-            echo "${IMAGE} could not be found! Did the build error?"
-            exit 1
-        fi
+        [[ -f ${IMAGE} ]] || die "${IMAGE} could not be found! Did the build error?"
         cp -v "${IMAGE}" "${IMAGES_FOLDER}"
     done
 done
