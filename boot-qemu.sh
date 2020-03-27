@@ -73,6 +73,7 @@ function sanity_check() {
 
 # Decompress rootfs images
 function decomp_rootfs() {
+    # All arm32_* options share the same rootfs, under images/arm
     [[ ${ARCH} =~ arm32 ]] && ARCH_RTFS_DIR=arm
 
     IMAGES_DIR=${BASE}/images/${ARCH_RTFS_DIR:-${ARCH}}
