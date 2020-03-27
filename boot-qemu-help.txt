@@ -33,7 +33,8 @@ Optional parameters:
     print the version string, then exit. If you would like to actually
     interact with the machine, this option passes 'rdinit=/bin/sh' to
     the kernel command line so that you are thrown into an interactive
-    shell.
+    shell. When this is set, there is no timeout so any value supplied
+    via the script's -t option is ignored.
 
   -t | --timeout:
     By default, the timeout command waits 3 minutes before killing the
