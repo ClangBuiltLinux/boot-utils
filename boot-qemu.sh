@@ -57,8 +57,8 @@ function parse_parameters() {
 # Sanity check parameters and required tools
 function sanity_check() {
     # Kernel build folder and architecture are required paramters
-    # We are not interactive by default and the default timeout is 3m
-    : "${ARCH:?}" "${KBUILD_DIR:?}" "${INTERACTIVE:=false}" "${TIMEOUT:=3m}"
+    [[ -z ${ARCH} ]] && die "Architecture ('-a') is required but not specified!"
+    [[ -z ${KBUILD_DIR} ]] && die "Kernel build folder ('-k') is required but not specified!"
 
     # KBUILD_DIR could be a relative path; turn it into an absolute one with readlink
     KBUILD_DIR=$(readlink -f "${KBUILD_DIR}")
@@ -86,7 +86,7 @@ function decomp_rootfs() {
 
 # Boot QEMU
 function setup_qemu_args() {
-    if ${INTERACTIVE}; then
+    if ${INTERACTIVE:=false}; then
         RDINIT=" rdinit=/bin/sh"
         APPEND_RDINIT=( -append "${RDINIT}" )
     fi
@@ -176,7 +176,7 @@ function setup_qemu_args() {
 
 # Invoke QEMU
 function invoke_qemu() {
-    ${INTERACTIVE} || QEMU=( timeout "${TIMEOUT}" unbuffer "${QEMU[@]}" )
+    ${INTERACTIVE} || QEMU=( timeout "${TIMEOUT:=3m}" unbuffer "${QEMU[@]}" )
 
     set -x
     "${QEMU[@]}" \
