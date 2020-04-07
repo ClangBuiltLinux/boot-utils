@@ -154,7 +154,8 @@ function setup_qemu_args() {
                              -device "ipmi-bmc-sim,id=bmc0"
                              -device "isa-ipmi-bt,bmc=bmc0,irq=10"
                              -L "${IMAGES_DIR}/" -bios skiboot.lid
-                             -machine powernv )
+                             -machine powernv
+                             -nodefaults )
             QEMU_RAM=2G
             QEMU=( qemu-system-ppc64 ) ;;
 
