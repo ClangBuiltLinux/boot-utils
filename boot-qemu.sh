@@ -31,6 +31,10 @@ function parse_parameters() {
             -d|--debug)
                 set -x ;;
 
+            -g|--gdb)
+                GDB=true
+                INTERACTIVE=true ;;
+
             -h|--help)
                 echo
                 cat "${BASE}"/boot-qemu-help.txt
@@ -177,6 +181,7 @@ function setup_qemu_args() {
 # Invoke QEMU
 function invoke_qemu() {
     ${INTERACTIVE} || QEMU=( timeout "${TIMEOUT:=3m}" unbuffer "${QEMU[@]}" )
+    ${GDB:=false} && QEMU=( "${QEMU[@]}" -s -S )
 
     set -x
     "${QEMU[@]}" \

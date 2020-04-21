@@ -25,6 +25,9 @@ Optional parameters:
   -d | --debug:
     Invokes 'set -x' for debugging the script.
 
+  -g | --gdb:
+    Add '-s -S' to the QEMU invocation to allow debugging via GDB.
+
   -h | --help:
     Prints this message then exits.
 
