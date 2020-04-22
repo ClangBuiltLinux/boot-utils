@@ -181,7 +181,21 @@ function setup_qemu_args() {
 # Invoke QEMU
 function invoke_qemu() {
     ${INTERACTIVE} || QEMU=( timeout "${TIMEOUT:=3m}" unbuffer "${QEMU[@]}" )
-    ${GDB:=false} && QEMU=( "${QEMU[@]}" -s -S )
+    if ${GDB:=false}; then
+        # Print message in bold green
+        printf '\033[01;32m'
+        echo
+        echo "Starting QEMU with GDB connection on port 1234..."
+        echo
+        echo "Use:"
+        echo
+        printf '\ttarget remote :1234\n'
+        echo
+        echo "to connect"
+        echo
+        printf '\033[0m'
+        QEMU=( "${QEMU[@]}" -s -S )
+    fi
 
     set -x
     "${QEMU[@]}" \
