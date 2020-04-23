@@ -109,6 +109,7 @@ function setup_qemu_args() {
                              -dtb "${KBUILD_DIR}"/arch/arm/boot/dts/aspeed-bmc-opp-palmetto.dtb
                              -machine palmetto-bmc
                              -no-reboot )
+            QEMU_RAM=512m
             QEMU=( qemu-system-arm ) ;;
 
         arm32_v6)
@@ -117,6 +118,7 @@ function setup_qemu_args() {
                              -dtb "${KBUILD_DIR}"/arch/arm/boot/dts/aspeed-bmc-opp-romulus.dtb
                              -machine romulus-bmc
                              -no-reboot )
+            QEMU_RAM=512m
             QEMU=( qemu-system-arm ) ;;
 
         arm32_v7)
@@ -124,6 +126,7 @@ function setup_qemu_args() {
             QEMU_ARCH_ARGS=( -append "console=ttyAMA0${RDINIT}"
                              -machine virt
                              -no-reboot )
+            QEMU_RAM=512m
             QEMU=( qemu-system-arm ) ;;
 
         arm64)
@@ -131,6 +134,7 @@ function setup_qemu_args() {
             QEMU_ARCH_ARGS=( -append "console=ttyAMA0${RDINIT}"
                              -cpu cortex-a57
                              -machine virt )
+            QEMU_RAM=512m
             QEMU=( qemu-system-aarch64 ) ;;
 
         mips|mipsel)
@@ -138,6 +142,7 @@ function setup_qemu_args() {
             QEMU_ARCH_ARGS=( "${APPEND_RDINIT[@]}"
                              -cpu 24Kf
                              -machine malta )
+            QEMU_RAM=512m
             QEMU=( qemu-system-"${ARCH}" )
             ARCH=mips ;;
 
@@ -175,6 +180,7 @@ function setup_qemu_args() {
             # Use KVM if the processor supports it (first part) and the KVM module is loaded (second part)
             [[ $(grep -c -E 'vmx|svm' /proc/cpuinfo) -gt 0 && $(lsmod 2>/dev/null | grep -c kvm) -gt 0 ]] && \
                 QEMU_ARCH_ARGS=( "${QEMU_ARCH_ARGS[@]}" -cpu host -d "unimp,guest_errors" -enable-kvm )
+            QEMU_RAM=512m
             QEMU=( qemu-system-x86_64 ) ;;
     esac
     checkbin "${QEMU[*]}"
@@ -201,7 +207,7 @@ function invoke_qemu() {
                 -display none \
                 -initrd "${ROOTFS}" \
                 -kernel "${KERNEL}" \
-                -m "${QEMU_RAM:=512m}" \
+                -m "${QEMU_RAM}" \
                 -nodefaults \
                 -s -S &
             QEMU_PID=$!
@@ -211,7 +217,7 @@ function invoke_qemu() {
             kill -9 "${QEMU_PID}"
             wait "${QEMU_PID}" 2>/dev/null
             while true; do
-                read -p "Rerun [Y/n/?] " yn
+                read -rp "Rerun [Y/n/?] " yn
                 case $yn in
                     [Yy]* ) break ;;
                     [Nn]* ) exit 0 ;;
@@ -227,7 +233,7 @@ function invoke_qemu() {
         -display none \
         -initrd "${ROOTFS}" \
         -kernel "${KERNEL}" \
-        -m "${QEMU_RAM:=512m}" \
+        -m "${QEMU_RAM}" \
         -nodefaults \
         -serial mon:stdio
     RET=${?}
