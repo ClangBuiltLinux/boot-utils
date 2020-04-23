@@ -184,6 +184,7 @@ function setup_qemu_args() {
     [[ -f ${KERNEL} ]] || die "${KERNEL} does not exist!"
 }
 
+
 # Invoke QEMU
 function invoke_qemu() {
     ${INTERACTIVE} || QEMU=( timeout "${TIMEOUT:=3m}" unbuffer "${QEMU[@]}" )
