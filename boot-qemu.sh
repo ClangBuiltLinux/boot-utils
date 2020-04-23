@@ -37,7 +37,7 @@ function parse_parameters() {
 
             -h|--help)
                 echo
-                cat "${BASE}"/boot-qemu-help.txt
+                cat "${BASE}"/README.txt
                 echo
                 exit 0 ;;
 
