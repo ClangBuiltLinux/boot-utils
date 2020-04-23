@@ -1,12 +1,19 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 
 # Root of the repo
 BASE=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)
 
+function green() {
+    echo -e "\033[01;32m${1}\033[0m"
+}
+
+function red() {
+    echo -e "\033[01;31m${1}\033[0m"
+}
 
 # Prints an error message in bold red then exits
 function die() {
-    printf "\n\033[01;31m%s\033[0m\n" "${1}"
+    red "${1}"
     exit 1
 }
 
@@ -177,24 +184,40 @@ function setup_qemu_args() {
     [[ -f ${KERNEL} ]] || die "${KERNEL} does not exist!"
 }
 
-
 # Invoke QEMU
 function invoke_qemu() {
     ${INTERACTIVE} || QEMU=( timeout "${TIMEOUT:=3m}" unbuffer "${QEMU[@]}" )
     if ${GDB:=false}; then
-        # Print message in bold green
-        printf '\033[01;32m'
-        echo
-        echo "Starting QEMU with GDB connection on port 1234..."
-        echo
-        echo "Use:"
-        echo
-        printf '\ttarget remote :1234\n'
-        echo
-        echo "to connect"
-        echo
-        printf '\033[0m'
-        QEMU=( "${QEMU[@]}" -s -S )
+        while true; do
+            if lsof -i:1234 &>/dev/null; then
+                red "Address :1234 already bound to. QEMU already running?"
+                exit 1
+            fi
+            green "Starting QEMU with GDB connection on port 1234..."
+            # Note: no -serial mon:stdio
+            "${QEMU[@]}" \
+              "${QEMU_ARCH_ARGS[@]}" \
+              -display none \
+              -initrd "${ROOTFS}" \
+              -kernel "${KERNEL}" \
+              -m "${QEMU_RAM:=512m}" \
+              -nodefaults \
+              -s -S &
+            QEMU_PID=$!
+            green "Starting GDB..."
+            gdb "${KBUILD_DIR}/vmlinux" -ex "target remote :1234"
+            red "Killing QEMU..."
+            kill -9 "${QEMU_PID}"
+            wait "${QEMU_PID}" 2>/dev/null
+            while true; do
+              read -p "Rerun [Y/n/?] " yn
+              case $yn in
+                [Yy]* ) break ;;
+                [Nn]* ) exit 0 ;;
+                * ) break ;;
+              esac
+            done
+        done
     fi
 
     set -x
