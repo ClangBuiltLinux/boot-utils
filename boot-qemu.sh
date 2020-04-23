@@ -197,13 +197,13 @@ function invoke_qemu() {
             green "Starting QEMU with GDB connection on port 1234..."
             # Note: no -serial mon:stdio
             "${QEMU[@]}" \
-              "${QEMU_ARCH_ARGS[@]}" \
-              -display none \
-              -initrd "${ROOTFS}" \
-              -kernel "${KERNEL}" \
-              -m "${QEMU_RAM:=512m}" \
-              -nodefaults \
-              -s -S &
+                "${QEMU_ARCH_ARGS[@]}" \
+                -display none \
+                -initrd "${ROOTFS}" \
+                -kernel "${KERNEL}" \
+                -m "${QEMU_RAM:=512m}" \
+                -nodefaults \
+                -s -S &
             QEMU_PID=$!
             green "Starting GDB..."
             gdb "${KBUILD_DIR}/vmlinux" -ex "target remote :1234"
