@@ -3,10 +3,17 @@
 # Root of the repo
 BASE=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)
 
+function green() {
+    printf "\033[01;32m%s\033[0m\n" "${1}"
+}
+
+function red() {
+    printf "\033[01;31m%s\033[0m\n" "${1}"
+}
 
 # Prints an error message in bold red then exits
 function die() {
-    printf "\n\033[01;31m%s\033[0m\n" "${1}"
+    red "${1}"
     exit 1
 }
 
@@ -102,6 +109,7 @@ function setup_qemu_args() {
                              -dtb "${KBUILD_DIR}"/arch/arm/boot/dts/aspeed-bmc-opp-palmetto.dtb
                              -machine palmetto-bmc
                              -no-reboot )
+            QEMU_RAM=512m
             QEMU=( qemu-system-arm ) ;;
 
         arm32_v6)
@@ -110,6 +118,7 @@ function setup_qemu_args() {
                              -dtb "${KBUILD_DIR}"/arch/arm/boot/dts/aspeed-bmc-opp-romulus.dtb
                              -machine romulus-bmc
                              -no-reboot )
+            QEMU_RAM=512m
             QEMU=( qemu-system-arm ) ;;
 
         arm32_v7)
@@ -117,6 +126,7 @@ function setup_qemu_args() {
             QEMU_ARCH_ARGS=( -append "console=ttyAMA0${RDINIT}"
                              -machine virt
                              -no-reboot )
+            QEMU_RAM=512m
             QEMU=( qemu-system-arm ) ;;
 
         arm64)
@@ -124,6 +134,7 @@ function setup_qemu_args() {
             QEMU_ARCH_ARGS=( -append "console=ttyAMA0${RDINIT}"
                              -cpu cortex-a57
                              -machine virt )
+            QEMU_RAM=512m
             QEMU=( qemu-system-aarch64 ) ;;
 
         mips|mipsel)
@@ -131,6 +142,7 @@ function setup_qemu_args() {
             QEMU_ARCH_ARGS=( "${APPEND_RDINIT[@]}"
                              -cpu 24Kf
                              -machine malta )
+            QEMU_RAM=512m
             QEMU=( qemu-system-"${ARCH}" )
             ARCH=mips ;;
 
@@ -168,6 +180,7 @@ function setup_qemu_args() {
             # Use KVM if the processor supports it (first part) and the KVM module is loaded (second part)
             [[ $(grep -c -E 'vmx|svm' /proc/cpuinfo) -gt 0 && $(lsmod 2>/dev/null | grep -c kvm) -gt 0 ]] && \
                 QEMU_ARCH_ARGS=( "${QEMU_ARCH_ARGS[@]}" -cpu host -d "unimp,guest_errors" -enable-kvm )
+            QEMU_RAM=512m
             QEMU=( qemu-system-x86_64 ) ;;
     esac
     checkbin "${QEMU[*]}"
@@ -182,19 +195,36 @@ function setup_qemu_args() {
 function invoke_qemu() {
     ${INTERACTIVE} || QEMU=( timeout "${TIMEOUT:=3m}" unbuffer "${QEMU[@]}" )
     if ${GDB:=false}; then
-        # Print message in bold green
-        printf '\033[01;32m'
-        echo
-        echo "Starting QEMU with GDB connection on port 1234..."
-        echo
-        echo "Use:"
-        echo
-        printf '\ttarget remote :1234\n'
-        echo
-        echo "to connect"
-        echo
-        printf '\033[0m'
-        QEMU=( "${QEMU[@]}" -s -S )
+        while true; do
+            if lsof -i:1234 &>/dev/null; then
+                red "Port :1234 already bound to. QEMU already running?"
+                exit 1
+            fi
+            green "Starting QEMU with GDB connection on port 1234..."
+            # Note: no -serial mon:stdio
+            "${QEMU[@]}" \
+                "${QEMU_ARCH_ARGS[@]}" \
+                -display none \
+                -initrd "${ROOTFS}" \
+                -kernel "${KERNEL}" \
+                -m "${QEMU_RAM}" \
+                -nodefaults \
+                -s -S &
+            QEMU_PID=$!
+            green "Starting GDB..."
+            gdb "${KBUILD_DIR}/vmlinux" -ex "target remote :1234"
+            red "Killing QEMU..."
+            kill -9 "${QEMU_PID}"
+            wait "${QEMU_PID}" 2>/dev/null
+            while true; do
+                read -rp "Rerun [Y/n/?] " yn
+                case $yn in
+                    [Yy]* ) break ;;
+                    [Nn]* ) exit 0 ;;
+                    * ) break ;;
+                esac
+            done
+        done
     fi
 
     set -x
@@ -203,7 +233,7 @@ function invoke_qemu() {
         -display none \
         -initrd "${ROOTFS}" \
         -kernel "${KERNEL}" \
-        -m "${QEMU_RAM:=512m}" \
+        -m "${QEMU_RAM}" \
         -nodefaults \
         -serial mon:stdio
     RET=${?}
