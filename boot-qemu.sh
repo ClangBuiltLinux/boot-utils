@@ -190,7 +190,7 @@ function invoke_qemu() {
     if ${GDB:=false}; then
         while true; do
             if lsof -i:1234 &>/dev/null; then
-                red "Address :1234 already bound to. QEMU already running?"
+                red "Port :1234 already bound to. QEMU already running?"
                 exit 1
             fi
             green "Starting QEMU with GDB connection on port 1234..."
