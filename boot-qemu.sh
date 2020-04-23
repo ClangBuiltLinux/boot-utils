@@ -1,14 +1,14 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
 # Root of the repo
 BASE=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)
 
 function green() {
-    echo -e "\033[01;32m${1}\033[0m"
+    printf "\033[01;32m%s\033[0m\n" "${1}"
 }
 
 function red() {
-    echo -e "\033[01;31m${1}\033[0m"
+    printf "\033[01;31m%s\033[0m\n" "${1}"
 }
 
 # Prints an error message in bold red then exits
@@ -210,12 +210,12 @@ function invoke_qemu() {
             kill -9 "${QEMU_PID}"
             wait "${QEMU_PID}" 2>/dev/null
             while true; do
-              read -p "Rerun [Y/n/?] " yn
-              case $yn in
-                [Yy]* ) break ;;
-                [Nn]* ) exit 0 ;;
-                * ) break ;;
-              esac
+                read -p "Rerun [Y/n/?] " yn
+                case $yn in
+                    [Yy]* ) break ;;
+                    [Nn]* ) exit 0 ;;
+                    * ) break ;;
+                esac
             done
         done
     fi
