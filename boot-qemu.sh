@@ -17,53 +17,58 @@ function die() {
     exit 1
 }
 
-
 # Check that a binary is found
 function checkbin() {
     command -v "${1}" &>/dev/null || die "${1} could not be found, please install it!"
 }
 
-
 # Parse inputs to the script
 function parse_parameters() {
-    while (( ${#} )); do
+    while ((${#})); do
         case ${1} in
-            -a|--arch|--architecture)
+            -a | --arch | --architecture)
                 shift
                 case ${1} in
-                    arm32_v5|arm32_v6|arm32_v7|arm64|mips|mipsel|ppc32|ppc64|ppc64le|x86_64) ARCH=${1} ;;
+                    arm32_v5 | arm32_v6 | arm32_v7 | arm64 | mips | mipsel | ppc32 | ppc64 | ppc64le | x86_64) ARCH=${1} ;;
                     *) die "Invalid --arch value '${1}'" ;;
-                esac ;;
+                esac
+                ;;
 
-            -d|--debug)
-                set -x ;;
+            -d | --debug)
+                set -x
+                ;;
 
-            -g|--gdb)
+            -g | --gdb)
                 GDB=true
-                INTERACTIVE=true ;;
+                INTERACTIVE=true
+                ;;
 
-            -h|--help)
+            -h | --help)
                 echo
                 cat "${BASE}"/README.txt
                 echo
-                exit 0 ;;
+                exit 0
+                ;;
 
-            -i|--interactive|--shell)
-                INTERACTIVE=true ;;
+            -i | --interactive | --shell)
+                INTERACTIVE=true
+                ;;
 
-            -k|--kbuild-folder)
-                shift && KBUILD_DIR=${1} ;;
+            -k | --kbuild-folder)
+                shift && KBUILD_DIR=${1}
+                ;;
 
-            -t|--timeout)
-                shift && TIMEOUT=${1} ;;
+            -t | --timeout)
+                shift && TIMEOUT=${1}
+                ;;
 
             *)
-                die "Invalid parameter '${1}'" ;;
+                die "Invalid parameter '${1}'"
+                ;;
         esac
         shift
     done
 }
-
 
 # Sanity check parameters and required tools
 function sanity_check() {
@@ -81,7 +86,6 @@ function sanity_check() {
     checkbin zstd
 }
 
-
 # Decompress rootfs images
 function decomp_rootfs() {
     # All arm32_* options share the same rootfs, under images/arm
@@ -94,106 +98,113 @@ function decomp_rootfs() {
     zstd -d "${ROOTFS}".zst -o "${ROOTFS}"
 }
 
-
 # Boot QEMU
 function setup_qemu_args() {
     if ${INTERACTIVE:=false}; then
         RDINIT=" rdinit=/bin/sh"
-        APPEND_RDINIT=( -append "${RDINIT}" )
+        APPEND_RDINIT=(-append "${RDINIT}")
     fi
 
     case ${ARCH} in
         arm32_v5)
             ARCH=arm
-            QEMU_ARCH_ARGS=( "${APPEND_RDINIT[@]}"
-                             -dtb "${KBUILD_DIR}"/arch/arm/boot/dts/aspeed-bmc-opp-palmetto.dtb
-                             -machine palmetto-bmc
-                             -no-reboot )
+            QEMU_ARCH_ARGS=("${APPEND_RDINIT[@]}"
+                -dtb "${KBUILD_DIR}"/arch/arm/boot/dts/aspeed-bmc-opp-palmetto.dtb
+                -machine palmetto-bmc
+                -no-reboot)
             QEMU_RAM=512m
-            QEMU=( qemu-system-arm ) ;;
+            QEMU=(qemu-system-arm)
+            ;;
 
         arm32_v6)
             ARCH=arm
-            QEMU_ARCH_ARGS=( "${APPEND_RDINIT[@]}"
-                             -dtb "${KBUILD_DIR}"/arch/arm/boot/dts/aspeed-bmc-opp-romulus.dtb
-                             -machine romulus-bmc
-                             -no-reboot )
+            QEMU_ARCH_ARGS=("${APPEND_RDINIT[@]}"
+                -dtb "${KBUILD_DIR}"/arch/arm/boot/dts/aspeed-bmc-opp-romulus.dtb
+                -machine romulus-bmc
+                -no-reboot)
             QEMU_RAM=512m
-            QEMU=( qemu-system-arm ) ;;
+            QEMU=(qemu-system-arm)
+            ;;
 
         arm32_v7)
             ARCH=arm
-            QEMU_ARCH_ARGS=( -append "console=ttyAMA0${RDINIT}"
-                             -machine virt
-                             -no-reboot )
+            QEMU_ARCH_ARGS=(-append "console=ttyAMA0${RDINIT}"
+                -machine virt
+                -no-reboot)
             QEMU_RAM=512m
-            QEMU=( qemu-system-arm ) ;;
+            QEMU=(qemu-system-arm)
+            ;;
 
         arm64)
             KIMAGE=Image.gz
-            QEMU_ARCH_ARGS=( -append "console=ttyAMA0${RDINIT}"
-                             -cpu cortex-a57
-                             -machine virt )
+            QEMU_ARCH_ARGS=(-append "console=ttyAMA0${RDINIT}"
+                -cpu cortex-a57
+                -machine virt)
             QEMU_RAM=512m
-            QEMU=( qemu-system-aarch64 ) ;;
+            QEMU=(qemu-system-aarch64)
+            ;;
 
-        mips|mipsel)
+        mips | mipsel)
             KIMAGE=vmlinux
-            QEMU_ARCH_ARGS=( "${APPEND_RDINIT[@]}"
-                             -cpu 24Kf
-                             -machine malta )
+            QEMU_ARCH_ARGS=("${APPEND_RDINIT[@]}"
+                -cpu 24Kf
+                -machine malta)
             QEMU_RAM=512m
-            QEMU=( qemu-system-"${ARCH}" )
-            ARCH=mips ;;
+            QEMU=(qemu-system-"${ARCH}")
+            ARCH=mips
+            ;;
 
         ppc32)
             ARCH=powerpc
-            QEMU_ARCH_ARGS=( -append "console=ttyS0${RDINIT}"
-                             -machine bamboo
-                             -no-reboot )
+            QEMU_ARCH_ARGS=(-append "console=ttyS0${RDINIT}"
+                -machine bamboo
+                -no-reboot)
             QEMU_RAM=128m
-            QEMU=( qemu-system-ppc ) ;;
+            QEMU=(qemu-system-ppc)
+            ;;
 
         ppc64)
             ARCH=powerpc
             KIMAGE=vmlinux
-            QEMU_ARCH_ARGS=( "${APPEND_RDINIT[@]}"
-                             -machine pseries
-                             -vga none )
+            QEMU_ARCH_ARGS=("${APPEND_RDINIT[@]}"
+                -machine pseries
+                -vga none)
             QEMU_RAM=1G
-            QEMU=( qemu-system-ppc64 ) ;;
+            QEMU=(qemu-system-ppc64)
+            ;;
 
         ppc64le)
             ARCH=powerpc
             KIMAGE=zImage.epapr
-            QEMU_ARCH_ARGS=( "${APPEND_RDINIT[@]}"
-                             -device "ipmi-bmc-sim,id=bmc0"
-                             -device "isa-ipmi-bt,bmc=bmc0,irq=10"
-                             -L "${IMAGES_DIR}/" -bios skiboot.lid
-                             -machine powernv )
+            QEMU_ARCH_ARGS=("${APPEND_RDINIT[@]}"
+                -device "ipmi-bmc-sim,id=bmc0"
+                -device "isa-ipmi-bt,bmc=bmc0,irq=10"
+                -L "${IMAGES_DIR}/" -bios skiboot.lid
+                -machine powernv)
             QEMU_RAM=2G
-            QEMU=( qemu-system-ppc64 ) ;;
+            QEMU=(qemu-system-ppc64)
+            ;;
 
         x86_64)
             KIMAGE=bzImage
-            QEMU_ARCH_ARGS=( -append "console=ttyS0${RDINIT}" )
+            QEMU_ARCH_ARGS=(-append "console=ttyS0${RDINIT}")
             # Use KVM if the processor supports it (first part) and the KVM module is loaded (second part)
-            [[ $(grep -c -E 'vmx|svm' /proc/cpuinfo) -gt 0 && $(lsmod 2>/dev/null | grep -c kvm) -gt 0 ]] && \
-                QEMU_ARCH_ARGS=( "${QEMU_ARCH_ARGS[@]}" -cpu host -d "unimp,guest_errors" -enable-kvm )
+            [[ $(grep -c -E 'vmx|svm' /proc/cpuinfo) -gt 0 && $(lsmod 2>/dev/null | grep -c kvm) -gt 0 ]] &&
+                QEMU_ARCH_ARGS=("${QEMU_ARCH_ARGS[@]}" -cpu host -d "unimp,guest_errors" -enable-kvm)
             QEMU_RAM=512m
-            QEMU=( qemu-system-x86_64 ) ;;
+            QEMU=(qemu-system-x86_64)
+            ;;
     esac
     checkbin "${QEMU[*]}"
 
-    [[ ${KIMAGE:=zImage} = "vmlinux" ]] || BOOT_DIR=arch/${ARCH}/boot/
+    [[ ${KIMAGE:=zImage} == "vmlinux" ]] || BOOT_DIR=arch/${ARCH}/boot/
     KERNEL=${KBUILD_DIR}/${BOOT_DIR}${KIMAGE}
     [[ -f ${KERNEL} ]] || die "${KERNEL} does not exist!"
 }
 
-
 # Invoke QEMU
 function invoke_qemu() {
-    ${INTERACTIVE} || QEMU=( timeout "${TIMEOUT:=3m}" unbuffer "${QEMU[@]}" )
+    ${INTERACTIVE} || QEMU=(timeout "${TIMEOUT:=3m}" unbuffer "${QEMU[@]}")
     if ${GDB:=false}; then
         while true; do
             if lsof -i:1234 &>/dev/null; then
@@ -219,9 +230,9 @@ function invoke_qemu() {
             while true; do
                 read -rp "Rerun [Y/n/?] " yn
                 case $yn in
-                    [Yy]* ) break ;;
-                    [Nn]* ) exit 0 ;;
-                    * ) break ;;
+                    [Yy]*) break ;;
+                    [Nn]*) exit 0 ;;
+                    *) break ;;
                 esac
             done
         done
@@ -241,7 +252,6 @@ function invoke_qemu() {
 
     return ${RET}
 }
-
 
 parse_parameters "${@}"
 sanity_check

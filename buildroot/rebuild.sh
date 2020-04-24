@@ -29,10 +29,10 @@ command -v zstd &>/dev/null || die "zstd could not be found on your system, plea
 # Generate list of configs to build
 CONFIGS=()
 [[ ${#} -eq 0 ]] && die "Please specify the configs that you want to build as parameters to this script!"
-while (( ${#} )); do
+while ((${#})); do
     case ${1} in
-        all) for CONFIG in *.config; do CONFIGS+=( "../${CONFIG}" ); done ;;
-        arm64|arm|mips|mipsel|ppc32|ppc64|ppc64le|x86_64) CONFIGS+=( "../${1}.config" ) ;;
+        all) for CONFIG in *.config; do CONFIGS+=("../${CONFIG}"); done ;;
+        arm64 | arm | mips | mipsel | ppc32 | ppc64 | ppc64le | x86_64) CONFIGS+=("../${1}.config") ;;
         *) die "Unknown parameter '${1}', exiting!" ;;
     esac
     shift
@@ -67,7 +67,7 @@ for CONFIG in "${CONFIGS[@]}"; do
     # Get the architecture from the name of the config: ../<arch>.config
     # basename strips ../
     # ${CONFIG//.config} strips .config
-    ARCH=$(basename "${CONFIG//.config}")
+    ARCH=$(basename "${CONFIG//.config/}")
 
     # Make sure images folder exists
     IMAGES_FOLDER=../../images/${ARCH}
@@ -75,7 +75,7 @@ for CONFIG in "${CONFIGS[@]}"; do
 
     # Copy new images
     # Make sure images exist before moving them
-    IMAGES=( "output/images/rootfs.cpio" )
+    IMAGES=("output/images/rootfs.cpio")
     for IMAGE in "${IMAGES[@]}"; do
         [[ -f ${IMAGE} ]] || die "${IMAGE} could not be found! Did the build error?"
         zstd -19 "${IMAGE}" -o "${IMAGES_FOLDER}/${IMAGE##*/}.zst" || die "Compressing ${IMAGE##*/} failed!"
