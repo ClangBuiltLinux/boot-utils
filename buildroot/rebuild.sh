@@ -32,7 +32,7 @@ CONFIGS=()
 while ((${#})); do
     case ${1} in
         all) for CONFIG in *.config; do CONFIGS+=("../${CONFIG}"); done ;;
-        arm64 | arm | mips | mipsel | ppc32 | ppc64 | ppc64le | x86_64) CONFIGS+=("../${1}.config") ;;
+        arm64 | arm | mips | mipsel | ppc32 | ppc64 | ppc64le | x86 | x86_64) CONFIGS+=("../${1}.config") ;;
         *) die "Unknown parameter '${1}', exiting!" ;;
     esac
     shift
