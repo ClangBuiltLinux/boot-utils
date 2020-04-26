@@ -29,7 +29,7 @@ function parse_parameters() {
             -a | --arch | --architecture)
                 shift
                 case ${1} in
-                    arm32_v5 | arm32_v6 | arm32_v7 | arm64 | mips | mipsel | ppc32 | ppc64 | ppc64le | x86_64) ARCH=${1} ;;
+                    arm32_v5 | arm32_v6 | arm32_v7 | arm64 | mips | mipsel | ppc32 | ppc64 | ppc64le | x86 | x86_64) ARCH=${1} ;;
                     *) die "Invalid --arch value '${1}'" ;;
                 esac
                 ;;
@@ -183,6 +183,13 @@ function setup_qemu_args() {
                 -machine powernv)
             QEMU_RAM=2G
             QEMU=(qemu-system-ppc64)
+            ;;
+
+        x86)
+            KIMAGE=bzImage
+            QEMU_ARCH_ARGS=(-append "console=ttyS0${RDINIT}" -enable-kvm)
+            QEMU_RAM=512m
+            QEMU=(qemu-system-i386)
             ;;
 
         x86_64)
