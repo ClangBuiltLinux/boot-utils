@@ -112,7 +112,6 @@ function setup_qemu_args() {
                 -dtb "${KBUILD_DIR}"/arch/arm/boot/dts/aspeed-bmc-opp-palmetto.dtb
                 -machine palmetto-bmc
                 -no-reboot)
-            QEMU_RAM=512m
             QEMU=(qemu-system-arm)
             ;;
 
@@ -122,7 +121,6 @@ function setup_qemu_args() {
                 -dtb "${KBUILD_DIR}"/arch/arm/boot/dts/aspeed-bmc-opp-romulus.dtb
                 -machine romulus-bmc
                 -no-reboot)
-            QEMU_RAM=512m
             QEMU=(qemu-system-arm)
             ;;
 
@@ -131,7 +129,6 @@ function setup_qemu_args() {
             QEMU_ARCH_ARGS=(-append "console=ttyAMA0${RDINIT}"
                 -machine virt
                 -no-reboot)
-            QEMU_RAM=512m
             QEMU=(qemu-system-arm)
             ;;
 
@@ -140,7 +137,6 @@ function setup_qemu_args() {
             QEMU_ARCH_ARGS=(-append "console=ttyAMA0${RDINIT}"
                 -cpu cortex-a57
                 -machine virt)
-            QEMU_RAM=512m
             QEMU=(qemu-system-aarch64)
             ;;
 
@@ -149,7 +145,6 @@ function setup_qemu_args() {
             QEMU_ARCH_ARGS=("${APPEND_RDINIT[@]}"
                 -cpu 24Kf
                 -machine malta)
-            QEMU_RAM=512m
             QEMU=(qemu-system-"${ARCH}")
             ARCH=mips
             ;;
@@ -198,7 +193,6 @@ function setup_qemu_args() {
             # Use KVM if the processor supports it (first part) and the KVM module is loaded (second part)
             [[ $(grep -c -E 'vmx|svm' /proc/cpuinfo) -gt 0 && $(lsmod 2>/dev/null | grep -c kvm) -gt 0 ]] &&
                 QEMU_ARCH_ARGS=("${QEMU_ARCH_ARGS[@]}" -cpu host -d "unimp,guest_errors" -enable-kvm)
-            QEMU_RAM=512m
             QEMU=(qemu-system-x86_64)
             ;;
     esac
@@ -212,6 +206,7 @@ function setup_qemu_args() {
 # Invoke QEMU
 function invoke_qemu() {
     ${INTERACTIVE} || QEMU=(timeout "${TIMEOUT:=3m}" unbuffer "${QEMU[@]}")
+    [[ -z ${QEMU_RAM} ]] && QEMU_RAM=512m
     if ${GDB:=false}; then
         while true; do
             if lsof -i:1234 &>/dev/null; then

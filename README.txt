@@ -14,6 +14,7 @@ Required parameters:
        * ppc32
        * ppc64
        * ppc64le
+       * x86
        * x86_64
 
   -k | --kbuild-folder:
