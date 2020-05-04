@@ -180,20 +180,16 @@ function setup_qemu_args() {
             QEMU=(qemu-system-ppc64)
             ;;
 
-        x86)
-            KIMAGE=bzImage
-            QEMU_ARCH_ARGS=(-append "console=ttyS0${RDINIT}" -enable-kvm)
-            QEMU_RAM=512m
-            QEMU=(qemu-system-i386)
-            ;;
-
-        x86_64)
+        x86 | x86_64)
             KIMAGE=bzImage
             QEMU_ARCH_ARGS=(-append "console=ttyS0${RDINIT}")
             # Use KVM if the processor supports it (first part) and the KVM module is loaded (second part)
             [[ $(grep -c -E 'vmx|svm' /proc/cpuinfo) -gt 0 && $(lsmod 2>/dev/null | grep -c kvm) -gt 0 ]] &&
                 QEMU_ARCH_ARGS=("${QEMU_ARCH_ARGS[@]}" -cpu host -d "unimp,guest_errors" -enable-kvm)
-            QEMU=(qemu-system-x86_64)
+            case ${ARCH} in
+                x86) QEMU=(qemu-system-i386) ;;
+                x86_64) QEMU=(qemu-system-x86_64) ;;
+            esac
             ;;
     esac
     checkbin "${QEMU[*]}"
