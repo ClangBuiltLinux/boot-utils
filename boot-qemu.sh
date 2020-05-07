@@ -100,15 +100,18 @@ function decomp_rootfs() {
 
 # Boot QEMU
 function setup_qemu_args() {
+    APPEND_STRING=""
     if ${INTERACTIVE:=false}; then
-        RDINIT=" rdinit=/bin/sh"
-        APPEND_RDINIT=(-append "${RDINIT}")
+        APPEND_STRING+="rdinit=/bin/sh "
+    fi
+    if ${GDB:=false}; then
+        APPEND_STRING+="nokaslr "
     fi
 
     case ${ARCH} in
         arm32_v5)
             ARCH=arm
-            QEMU_ARCH_ARGS=("${APPEND_RDINIT[@]}"
+            QEMU_ARCH_ARGS=(
                 -dtb "${KBUILD_DIR}"/arch/arm/boot/dts/aspeed-bmc-opp-palmetto.dtb
                 -machine palmetto-bmc
                 -no-reboot)
@@ -117,7 +120,7 @@ function setup_qemu_args() {
 
         arm32_v6)
             ARCH=arm
-            QEMU_ARCH_ARGS=("${APPEND_RDINIT[@]}"
+            QEMU_ARCH_ARGS=(
                 -dtb "${KBUILD_DIR}"/arch/arm/boot/dts/aspeed-bmc-opp-romulus.dtb
                 -machine romulus-bmc
                 -no-reboot)
@@ -126,7 +129,8 @@ function setup_qemu_args() {
 
         arm32_v7)
             ARCH=arm
-            QEMU_ARCH_ARGS=(-append "console=ttyAMA0${RDINIT}"
+            APPEND_STRING+="console=ttyAMA0 "
+            QEMU_ARCH_ARGS=(
                 -machine virt
                 -no-reboot)
             QEMU=(qemu-system-arm)
@@ -134,7 +138,8 @@ function setup_qemu_args() {
 
         arm64)
             KIMAGE=Image.gz
-            QEMU_ARCH_ARGS=(-append "console=ttyAMA0${RDINIT}"
+            APPEND_STRING+="console=ttyAMA0 "
+            QEMU_ARCH_ARGS=(
                 -cpu cortex-a57
                 -machine virt)
             QEMU=(qemu-system-aarch64)
@@ -142,7 +147,7 @@ function setup_qemu_args() {
 
         mips | mipsel)
             KIMAGE=vmlinux
-            QEMU_ARCH_ARGS=("${APPEND_RDINIT[@]}"
+            QEMU_ARCH_ARGS=(
                 -cpu 24Kf
                 -machine malta)
             QEMU=(qemu-system-"${ARCH}")
@@ -151,7 +156,8 @@ function setup_qemu_args() {
 
         ppc32)
             ARCH=powerpc
-            QEMU_ARCH_ARGS=(-append "console=ttyS0${RDINIT}"
+            APPEND_STRING+="console=ttyS0 "
+            QEMU_ARCH_ARGS=(
                 -machine bamboo
                 -no-reboot)
             QEMU_RAM=128m
@@ -161,7 +167,7 @@ function setup_qemu_args() {
         ppc64)
             ARCH=powerpc
             KIMAGE=vmlinux
-            QEMU_ARCH_ARGS=("${APPEND_RDINIT[@]}"
+            QEMU_ARCH_ARGS=(
                 -machine pseries
                 -vga none)
             QEMU_RAM=1G
@@ -171,7 +177,7 @@ function setup_qemu_args() {
         ppc64le)
             ARCH=powerpc
             KIMAGE=zImage.epapr
-            QEMU_ARCH_ARGS=("${APPEND_RDINIT[@]}"
+            QEMU_ARCH_ARGS=(
                 -device "ipmi-bmc-sim,id=bmc0"
                 -device "isa-ipmi-bt,bmc=bmc0,irq=10"
                 -L "${IMAGES_DIR}/" -bios skiboot.lid
@@ -182,7 +188,7 @@ function setup_qemu_args() {
 
         x86 | x86_64)
             KIMAGE=bzImage
-            QEMU_ARCH_ARGS=(-append "console=ttyS0${RDINIT}")
+            APPEND_STRING+="console=ttyS0 "
             # Use KVM if the processor supports it (first part) and the KVM module is loaded (second part)
             [[ $(grep -c -E 'vmx|svm' /proc/cpuinfo) -gt 0 && $(lsmod 2>/dev/null | grep -c kvm) -gt 0 ]] &&
                 QEMU_ARCH_ARGS=("${QEMU_ARCH_ARGS[@]}" -cpu host -d "unimp,guest_errors" -enable-kvm)
@@ -213,6 +219,7 @@ function invoke_qemu() {
             # Note: no -serial mon:stdio
             "${QEMU[@]}" \
                 "${QEMU_ARCH_ARGS[@]}" \
+                -append "${APPEND_STRING}" \
                 -display none \
                 -initrd "${ROOTFS}" \
                 -kernel "${KERNEL}" \
@@ -239,6 +246,7 @@ function invoke_qemu() {
     set -x
     "${QEMU[@]}" \
         "${QEMU_ARCH_ARGS[@]}" \
+        -append "${APPEND_STRING}" \
         -display none \
         -initrd "${ROOTFS}" \
         -kernel "${KERNEL}" \
