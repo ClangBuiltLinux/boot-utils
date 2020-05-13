@@ -207,7 +207,6 @@ function setup_qemu_args() {
 
 # Invoke QEMU
 function invoke_qemu() {
-    ${INTERACTIVE} || QEMU=(timeout --foreground "${TIMEOUT:=3m}" unbuffer "${QEMU[@]}")
     [[ -z ${QEMU_RAM} ]] && QEMU_RAM=512m
     if ${GDB:=false}; then
         while true; do
@@ -243,6 +242,7 @@ function invoke_qemu() {
         done
     fi
 
+    ${INTERACTIVE} || QEMU=(timeout --foreground "${TIMEOUT:=3m}" unbuffer "${QEMU[@]}")
     set -x
     "${QEMU[@]}" \
         "${QEMU_ARCH_ARGS[@]}" \
