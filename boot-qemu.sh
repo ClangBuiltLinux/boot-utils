@@ -191,7 +191,7 @@ function setup_qemu_args() {
             APPEND_STRING+="console=ttyS0 "
             # Use KVM if the processor supports it (first part) and the KVM module is loaded (second part)
             [[ $(grep -c -E 'vmx|svm' /proc/cpuinfo) -gt 0 && $(lsmod 2>/dev/null | grep -c kvm) -gt 0 ]] &&
-                QEMU_ARCH_ARGS=("${QEMU_ARCH_ARGS[@]}" -cpu host -d "unimp,guest_errors" -enable-kvm -smp $(nproc))
+                QEMU_ARCH_ARGS=("${QEMU_ARCH_ARGS[@]}" -cpu host -d "unimp,guest_errors" -enable-kvm -smp "$(nproc)")
             case ${ARCH} in
                 x86) QEMU=(qemu-system-i386) ;;
                 x86_64) QEMU=(qemu-system-x86_64) ;;
