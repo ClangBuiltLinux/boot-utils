@@ -188,8 +188,10 @@ function setup_qemu_args() {
 
         riscv)
             KIMAGE=Image
+            DEB_BIOS=/usr/lib/riscv64-linux-gnu/opensbi/qemu/virt/fw_jump.elf
+            [[ -f ${DEB_BIOS} && -z ${BIOS} ]] && BIOS=${DEB_BIOS}
             QEMU_ARCH_ARGS=(
-                -bios default
+                -bios "${BIOS:-default}"
                 -M virt
             )
             QEMU=(qemu-system-riscv64)
