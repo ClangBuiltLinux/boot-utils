@@ -140,7 +140,7 @@ function setup_qemu_args() {
             KIMAGE=Image.gz
             APPEND_STRING+="console=ttyAMA0 "
             QEMU_ARCH_ARGS=(
-                -cpu cortex-a57
+                -cpu max
                 -machine virt)
             QEMU=(qemu-system-aarch64)
             ;;
