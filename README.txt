@@ -28,7 +28,8 @@ Optional parameters:
     Invokes 'set -x' for debugging the script.
 
   -g | --gdb:
-    Add '-s -S' to the QEMU invocation to allow debugging via GDB.
+    Add '-s -S' to the QEMU invocation to allow debugging via GDB (will invoke
+   `$GDB_BIN` env var else `gdb-multiarch`).
 
   -h | --help:
     Prints this message then exits.

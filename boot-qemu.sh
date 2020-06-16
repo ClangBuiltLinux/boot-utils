@@ -238,7 +238,7 @@ function invoke_qemu() {
                 -s -S &
             QEMU_PID=$!
             green "Starting GDB..."
-            gdb "${KBUILD_DIR}/vmlinux" -ex "target remote :1234"
+            "${GDB_BIN:-gdb-multiarch}" "${KBUILD_DIR}/vmlinux" -ex "target remote :1234"
             red "Killing QEMU..."
             kill -9 "${QEMU_PID}"
             wait "${QEMU_PID}" 2>/dev/null
