@@ -156,6 +156,7 @@ function setup_qemu_args() {
 
         ppc32)
             ARCH=powerpc
+            KIMAGE=uImage
             APPEND_STRING+="console=ttyS0 "
             QEMU_ARCH_ARGS=(
                 -machine bamboo
