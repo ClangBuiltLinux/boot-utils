@@ -139,8 +139,13 @@ function setup_qemu_args() {
         arm64)
             KIMAGE=Image.gz
             APPEND_STRING+="console=ttyAMA0 "
+            if [[ "$(uname -m)" = "aarch64" && -e /dev/kvm ]]; then
+                ARM64_CPU=host
+                ARM64_KVM_FLAGS=(-enable-kvm)
+            fi
             QEMU_ARCH_ARGS=(
-                -cpu max
+                "${ARM64_KVM_FLAGS[@]}"
+                -cpu "${ARM64_CPU:-max}"
                 -machine virt)
             QEMU=(qemu-system-aarch64)
             ;;
@@ -201,8 +206,8 @@ function setup_qemu_args() {
         x86 | x86_64)
             KIMAGE=bzImage
             APPEND_STRING+="console=ttyS0 "
-            # Use KVM if the processor supports it (first part) and the KVM module is loaded (second part)
-            [[ $(grep -c -E 'vmx|svm' /proc/cpuinfo) -gt 0 && $(lsmod 2>/dev/null | grep -c kvm) -gt 0 ]] &&
+            # Use KVM if the processor supports it and the KVM module is loaded (i.e. /dev/kvm exists)
+            [[ $(grep -c -E 'vmx|svm' /proc/cpuinfo) -gt 0 && -e /dev/kvm ]] &&
                 QEMU_ARCH_ARGS=("${QEMU_ARCH_ARGS[@]}" -cpu host -d "unimp,guest_errors" -enable-kvm -smp "$(nproc)")
             case ${ARCH} in
                 x86) QEMU=(qemu-system-i386) ;;
