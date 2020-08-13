@@ -29,7 +29,7 @@ function parse_parameters() {
             -a | --arch | --architecture)
                 shift
                 case ${1} in
-                    arm32_v5 | arm32_v6 | arm32_v7 | arm64 | mips | mipsel | ppc32 | ppc64 | ppc64le | riscv | x86 | x86_64) ARCH=${1} ;;
+                    arm32_v5 | arm32_v6 | arm32_v7 | arm64 | mips | mipsel | ppc32 | ppc64 | ppc64le | riscv | s390 | x86 | x86_64) ARCH=${1} ;;
                     *) die "Invalid --arch value '${1}'" ;;
                 esac
                 ;;
@@ -196,6 +196,12 @@ function setup_qemu_args() {
                 -M virt
             )
             QEMU=(qemu-system-riscv64)
+            ;;
+
+        s390)
+            KIMAGE=bzImage
+            QEMU_ARCH_ARGS=(-M s390-ccw-virtio)
+            QEMU=(qemu-system-s390x)
             ;;
 
         x86 | x86_64)
