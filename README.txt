@@ -15,6 +15,7 @@ Required parameters:
        * ppc64
        * ppc64le
        * riscv
+       * s390
        * x86
        * x86_64
 
