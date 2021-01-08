@@ -19,10 +19,11 @@ Required parameters:
        * x86
        * x86_64
 
-  -k | --kbuild-folder:
-    The kernel build folder, as an absolute path or relative path
-    from wherever the script is being run. This is wherever the
-    compiled vmlinux image lives, not the architecture's boot folder.
+  -k | --kernel-location:
+    The kernel location, which can either be the kernel image itself or
+    the root of the kernel build output folder. Either option can be
+    passed as an absolute path or relative path from wherever the script
+    is being run.
 
 Optional parameters:
   -d | --debug:

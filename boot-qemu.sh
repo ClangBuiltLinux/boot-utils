@@ -54,8 +54,8 @@ function parse_parameters() {
                 INTERACTIVE=true
                 ;;
 
-            -k | --kbuild-folder)
-                shift && KBUILD_DIR=${1}
+            -k | --kernel-location)
+                shift && KERNEL_LOCATION=${1}
                 ;;
 
             -t | --timeout)
@@ -74,13 +74,10 @@ function parse_parameters() {
 function sanity_check() {
     # Kernel build folder and architecture are required paramters
     [[ -z ${ARCH} ]] && die "Architecture ('-a') is required but not specified!"
-    [[ -z ${KBUILD_DIR} ]] && die "Kernel build folder ('-k') is required but not specified!"
+    [[ -z ${KERNEL_LOCATION} ]] && die "Kernel image or kernel build folder ('-k') is required but not specified!"
 
-    # KBUILD_DIR could be a relative path; turn it into an absolute one with readlink
-    KBUILD_DIR=$(readlink -f "${KBUILD_DIR}")
-
-    # Let the user know if the kernel build folder does not exist
-    [[ -d ${KBUILD_DIR} ]] || die "${KBUILD_DIR} does not exist!"
+    # KERNEL_LOCATION could be a relative path; turn it into an absolute one with readlink
+    KERNEL_LOCATION=$(readlink -f "${KERNEL_LOCATION}")
 
     # Make sure zstd is install
     checkbin zstd
@@ -223,8 +220,16 @@ function setup_qemu_args() {
     esac
     checkbin "${QEMU[*]}"
 
-    [[ ${KIMAGE:=zImage} == "vmlinux" ]] || BOOT_DIR=arch/${ARCH}/boot/
-    KERNEL=${KBUILD_DIR}/${BOOT_DIR}${KIMAGE}
+    # If '-k' is an path that ends in the kernel image, we can just use it directly
+    if [[ ${KERNEL_LOCATION##*/} = "${KIMAGE:=zImage}" ]]; then
+        KERNEL=${KERNEL_LOCATION}
+    # If not though, we need to find it based on the kernel build directory
+    else
+        # If the image is an uncompressed vmlinux, it is in the root of the build folder
+        # Otherwise, it is in the architecture's boot directory
+        [[ ${KIMAGE} == "vmlinux" ]] || BOOT_DIR=arch/${ARCH}/boot/
+        KERNEL=${KERNEL_LOCATION}/${BOOT_DIR}${KIMAGE}
+    fi
     [[ -f ${KERNEL} ]] || die "${KERNEL} does not exist!"
 }
 
