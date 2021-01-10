@@ -83,20 +83,14 @@ function sanity_check() {
     checkbin zstd
 }
 
-# Decompress rootfs images
-function decomp_rootfs() {
+# Boot QEMU
+function setup_qemu_args() {
     # All arm32_* options share the same rootfs, under images/arm
     [[ ${ARCH} =~ arm32 ]] && ARCH_RTFS_DIR=arm
 
     IMAGES_DIR=${BASE}/images/${ARCH_RTFS_DIR:-${ARCH}}
     ROOTFS=${IMAGES_DIR}/rootfs.cpio
 
-    rm -rf "${ROOTFS}"
-    zstd -d "${ROOTFS}".zst -o "${ROOTFS}"
-}
-
-# Boot QEMU
-function setup_qemu_args() {
     APPEND_STRING=""
     if ${INTERACTIVE:=false}; then
         APPEND_STRING+="rdinit=/bin/sh "
@@ -108,8 +102,8 @@ function setup_qemu_args() {
     case ${ARCH} in
         arm32_v5)
             ARCH=arm
+            DTB=aspeed-bmc-opp-palmetto.dtb
             QEMU_ARCH_ARGS=(
-                -dtb "${KBUILD_DIR}"/arch/arm/boot/dts/aspeed-bmc-opp-palmetto.dtb
                 -machine palmetto-bmc
                 -no-reboot)
             QEMU=(qemu-system-arm)
@@ -117,8 +111,8 @@ function setup_qemu_args() {
 
         arm32_v6)
             ARCH=arm
+            DTB=aspeed-bmc-opp-romulus.dtb
             QEMU_ARCH_ARGS=(
-                -dtb "${KBUILD_DIR}"/arch/arm/boot/dts/aspeed-bmc-opp-romulus.dtb
                 -machine romulus-bmc
                 -no-reboot)
             QEMU=(qemu-system-arm)
@@ -231,10 +225,25 @@ function setup_qemu_args() {
         KERNEL=${KERNEL_LOCATION}/${BOOT_DIR}${KIMAGE}
     fi
     [[ -f ${KERNEL} ]] || die "${KERNEL} does not exist!"
+    if [[ -n ${DTB} ]]; then
+        # If we are in a boot folder, look for them in the dts folder in it
+        if [[ $(basename "${KERNEL%/*}") = "boot" ]]; then
+            DTB_FOLDER=dts/
+        # Otherwise, assume there is a dtbs folder in the same folder as the kernel image (tuxmake)
+        else
+            DTB_FOLDER=dtbs/
+        fi
+        DTB=${KERNEL%/*}/${DTB_FOLDER}${DTB}
+        [[ -f ${DTB} ]] || die "${DTB##*/} is required for booting but it could not be found at ${DTB}!"
+        QEMU_ARCH_ARGS+=(-dtb "${DTB}")
+    fi
 }
 
 # Invoke QEMU
 function invoke_qemu() {
+    rm -rf "${ROOTFS}"
+    zstd -d "${ROOTFS}".zst -o "${ROOTFS}"
+
     [[ -z ${QEMU_RAM} ]] && QEMU_RAM=512m
     if ${GDB:=false}; then
         while true; do
@@ -289,6 +298,5 @@ function invoke_qemu() {
 
 parse_parameters "${@}"
 sanity_check
-decomp_rootfs
 setup_qemu_args
 invoke_qemu
