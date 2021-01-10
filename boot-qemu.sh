@@ -83,20 +83,14 @@ function sanity_check() {
     checkbin zstd
 }
 
-# Decompress rootfs images
-function decomp_rootfs() {
+# Boot QEMU
+function setup_qemu_args() {
     # All arm32_* options share the same rootfs, under images/arm
     [[ ${ARCH} =~ arm32 ]] && ARCH_RTFS_DIR=arm
 
     IMAGES_DIR=${BASE}/images/${ARCH_RTFS_DIR:-${ARCH}}
     ROOTFS=${IMAGES_DIR}/rootfs.cpio
 
-    rm -rf "${ROOTFS}"
-    zstd -d "${ROOTFS}".zst -o "${ROOTFS}"
-}
-
-# Boot QEMU
-function setup_qemu_args() {
     APPEND_STRING=""
     if ${INTERACTIVE:=false}; then
         APPEND_STRING+="rdinit=/bin/sh "
@@ -247,6 +241,9 @@ function setup_qemu_args() {
 
 # Invoke QEMU
 function invoke_qemu() {
+    rm -rf "${ROOTFS}"
+    zstd -d "${ROOTFS}".zst -o "${ROOTFS}"
+
     [[ -z ${QEMU_RAM} ]] && QEMU_RAM=512m
     if ${GDB:=false}; then
         while true; do
@@ -301,6 +298,5 @@ function invoke_qemu() {
 
 parse_parameters "${@}"
 sanity_check
-decomp_rootfs
 setup_qemu_args
 invoke_qemu
