@@ -242,7 +242,7 @@ function setup_qemu_args() {
 # Invoke QEMU
 function invoke_qemu() {
     rm -rf "${ROOTFS}"
-    zstd -d "${ROOTFS}".zst -o "${ROOTFS}"
+    zstd -q -d "${ROOTFS}".zst -o "${ROOTFS}"
 
     [[ -z ${QEMU_RAM} ]] && QEMU_RAM=512m
     if ${GDB:=false}; then
