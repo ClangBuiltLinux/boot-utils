@@ -3,17 +3,27 @@
 # Root of the repo
 BASE=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)
 
+function pretty_print() {
+    printf "%b%s\033[0m" "${1}" "${2}"
+    shift 2
+    while ((${#})); do
+        printf "%b" "${1}"
+        shift
+    done
+    printf '\n'
+}
+
 function green() {
-    printf "\033[01;32m%s\033[0m\n" "${1}"
+    pretty_print "\033[01;32m" "${@}"
 }
 
 function red() {
-    printf "\033[01;31m%s\033[0m\n" "${1}"
+    pretty_print "\033[01;31m" "${@}"
 }
 
 # Prints an error message in bold red then exits
 function die() {
-    red "${1}"
+    red "${@}"
     exit 1
 }
 
@@ -243,6 +253,9 @@ function setup_qemu_args() {
 function invoke_qemu() {
     rm -rf "${ROOTFS}"
     zstd -q -d "${ROOTFS}".zst -o "${ROOTFS}"
+
+    green "QEMU location: " "$(dirname "$(command -v "${QEMU[*]}")")" '\n'
+    green "QEMU version: " "$("${QEMU[@]}" --version | head -n1)" '\n'
 
     [[ -z ${QEMU_RAM} ]] && QEMU_RAM=512m
     if ${GDB:=false}; then
