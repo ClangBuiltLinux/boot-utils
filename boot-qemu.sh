@@ -72,6 +72,10 @@ function parse_parameters() {
                 shift && TIMEOUT=${1}
                 ;;
 
+            --use-cbl-qemu)
+                USE_CBL_QEMU=true
+                ;;
+
             *)
                 die "Invalid parameter '${1}'"
                 ;;
@@ -208,6 +212,18 @@ function setup_qemu_args() {
             KIMAGE=bzImage
             QEMU_ARCH_ARGS=(-M s390-ccw-virtio)
             QEMU=(qemu-system-s390x)
+            if ${USE_CBL_QEMU:-false}; then
+                QEMU_BINARIES=${BASE}/qemu-binaries
+
+                green "Downloading or updating qemu-binaries..."
+                [[ -d ${QEMU_BINARIES} ]] || git clone https://github.com/ClangBuiltLinux/qemu-binaries "${QEMU_BINARIES}"
+                git -C "${QEMU_BINARIES}" pull --rebase
+
+                QEMU_BIN=${QEMU_BINARIES}/bin
+                QEMU_S390=${QEMU_BIN}/${QEMU[*]}
+                zstd -q -d "${QEMU_S390}".zst -o "${QEMU_S390}" || die "Error decompressing qemu-system-s390x"
+                export PATH=${QEMU_BIN}:${PATH}
+            fi
             ;;
 
         x86 | x86_64)
