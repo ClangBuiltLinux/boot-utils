@@ -78,6 +78,6 @@ for CONFIG in "${CONFIGS[@]}"; do
     IMAGES=("output/images/rootfs.cpio")
     for IMAGE in "${IMAGES[@]}"; do
         [[ -f ${IMAGE} ]] || die "${IMAGE} could not be found! Did the build error?"
-        zstd -19 "${IMAGE}" -o "${IMAGES_FOLDER}/${IMAGE##*/}.zst" || die "Compressing ${IMAGE##*/} failed!"
+        zstd -f -19 "${IMAGE}" -o "${IMAGES_FOLDER}/${IMAGE##*/}.zst" || die "Compressing ${IMAGE##*/} failed!"
     done
 done
