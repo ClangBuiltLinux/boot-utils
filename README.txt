@@ -9,6 +9,7 @@ Required parameters:
        * arm32_v6
        * arm32_v7
        * arm64
+       * arm64be
        * mips
        * mipsel
        * ppc32
