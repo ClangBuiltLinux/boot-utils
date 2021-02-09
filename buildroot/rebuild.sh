@@ -32,14 +32,14 @@ CONFIGS=()
 while ((${#})); do
     case ${1} in
         all) for CONFIG in *.config; do CONFIGS+=("../${CONFIG}"); done ;;
-        arm64 | arm | mips | mipsel | ppc32 | ppc64 | ppc64le | riscv | s390 | x86 | x86_64) CONFIGS+=("../${1}.config") ;;
+        arm64 | arm64be | arm | mips | mipsel | ppc32 | ppc64 | ppc64le | riscv | s390 | x86 | x86_64) CONFIGS+=("../${1}.config") ;;
         *) die "Unknown parameter '${1}', exiting!" ;;
     esac
     shift
 done
 
 # Download latest LTS buildroot release
-BUILDROOT_VERSION=2020.11-rc1
+BUILDROOT_VERSION=2020.11.2
 if [[ -d src ]]; then
     if [[ $(cd src && make print-version | cut -d - -f 1 2>/dev/null) != "${BUILDROOT_VERSION}" ]]; then
         rm -rf src
@@ -78,6 +78,6 @@ for CONFIG in "${CONFIGS[@]}"; do
     IMAGES=("output/images/rootfs.cpio")
     for IMAGE in "${IMAGES[@]}"; do
         [[ -f ${IMAGE} ]] || die "${IMAGE} could not be found! Did the build error?"
-        zstd -19 "${IMAGE}" -o "${IMAGES_FOLDER}/${IMAGE##*/}.zst" || die "Compressing ${IMAGE##*/} failed!"
+        zstd -f -19 "${IMAGE}" -o "${IMAGES_FOLDER}/${IMAGE##*/}.zst" || die "Compressing ${IMAGE##*/} failed!"
     done
 done
