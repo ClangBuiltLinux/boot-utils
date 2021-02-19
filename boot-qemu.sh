@@ -146,12 +146,11 @@ function setup_qemu_args() {
             KIMAGE=Image.gz
             APPEND_STRING+="console=ttyAMA0 "
             if [[ "$(uname -m)" = "aarch64" && -e /dev/kvm ]]; then
-                ARM64_CPU=host
                 ARM64_KVM_FLAGS=(-enable-kvm)
             fi
             QEMU_ARCH_ARGS=(
                 "${ARM64_KVM_FLAGS[@]}"
-                -cpu "${ARM64_CPU:-max}"
+                -cpu max
                 -machine virt)
             QEMU=(qemu-system-aarch64)
             ;;
