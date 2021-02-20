@@ -119,7 +119,8 @@ function setup_qemu_args() {
             DTB=aspeed-bmc-opp-palmetto.dtb
             QEMU_ARCH_ARGS=(
                 -machine palmetto-bmc
-                -no-reboot)
+                -no-reboot
+            )
             QEMU=(qemu-system-arm)
             ;;
 
@@ -128,7 +129,8 @@ function setup_qemu_args() {
             DTB=aspeed-bmc-opp-romulus.dtb
             QEMU_ARCH_ARGS=(
                 -machine romulus-bmc
-                -no-reboot)
+                -no-reboot
+            )
             QEMU=(qemu-system-arm)
             ;;
 
@@ -137,7 +139,8 @@ function setup_qemu_args() {
             APPEND_STRING+="console=ttyAMA0 "
             QEMU_ARCH_ARGS=(
                 -machine virt
-                -no-reboot)
+                -no-reboot
+            )
             QEMU=(qemu-system-arm)
             ;;
 
@@ -147,7 +150,8 @@ function setup_qemu_args() {
             APPEND_STRING+="console=ttyAMA0 "
             QEMU_ARCH_ARGS=(
                 -cpu max
-                -machine "virt,gic-version=max")
+                -machine "virt,gic-version=max"
+            )
             if [[ "$(uname -m)" = "aarch64" && -e /dev/kvm ]]; then
                 QEMU_ARCH_ARGS+=(-enable-kvm)
             else
@@ -160,7 +164,8 @@ function setup_qemu_args() {
             KIMAGE=vmlinux
             QEMU_ARCH_ARGS=(
                 -cpu 24Kf
-                -machine malta)
+                -machine malta
+            )
             QEMU=(qemu-system-"${ARCH}")
             ARCH=mips
             ;;
@@ -171,7 +176,8 @@ function setup_qemu_args() {
             APPEND_STRING+="console=ttyS0 "
             QEMU_ARCH_ARGS=(
                 -machine bamboo
-                -no-reboot)
+                -no-reboot
+            )
             QEMU_RAM=128m
             QEMU=(qemu-system-ppc)
             ;;
@@ -181,7 +187,8 @@ function setup_qemu_args() {
             KIMAGE=vmlinux
             QEMU_ARCH_ARGS=(
                 -machine pseries
-                -vga none)
+                -vga none
+            )
             QEMU_RAM=1G
             QEMU=(qemu-system-ppc64)
             ;;
@@ -193,7 +200,8 @@ function setup_qemu_args() {
                 -device "ipmi-bmc-sim,id=bmc0"
                 -device "isa-ipmi-bt,bmc=bmc0,irq=10"
                 -L "${IMAGES_DIR}/" -bios skiboot.lid
-                -machine powernv)
+                -machine powernv
+            )
             QEMU_RAM=2G
             QEMU=(qemu-system-ppc64)
             ;;
@@ -219,8 +227,14 @@ function setup_qemu_args() {
             KIMAGE=bzImage
             APPEND_STRING+="console=ttyS0 "
             # Use KVM if the processor supports it and the KVM module is loaded (i.e. /dev/kvm exists)
-            [[ $(grep -c -E 'vmx|svm' /proc/cpuinfo) -gt 0 && -e /dev/kvm ]] &&
-                QEMU_ARCH_ARGS=("${QEMU_ARCH_ARGS[@]}" -cpu host -d "unimp,guest_errors" -enable-kvm -smp "$(nproc)")
+            if [[ $(grep -c -E 'vmx|svm' /proc/cpuinfo) -gt 0 && -e /dev/kvm ]]; then
+                QEMU_ARCH_ARGS=(
+                    -cpu host
+                    -d "unimp,guest_errors"
+                    -enable-kvm
+                    -smp "$(nproc)"
+                )
+            fi
             case ${ARCH} in
                 x86) QEMU=(qemu-system-i386) ;;
                 x86_64) QEMU=(qemu-system-x86_64) ;;
