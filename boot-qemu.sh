@@ -285,7 +285,7 @@ function invoke_qemu() {
             # Note: no -serial mon:stdio
             "${QEMU[@]}" \
                 "${QEMU_ARCH_ARGS[@]}" \
-                -append "${APPEND_STRING}" \
+                -append "${APPEND_STRING%* }" \
                 -display none \
                 -initrd "${ROOTFS}" \
                 -kernel "${KERNEL}" \
@@ -313,7 +313,7 @@ function invoke_qemu() {
     set -x
     "${QEMU[@]}" \
         "${QEMU_ARCH_ARGS[@]}" \
-        -append "${APPEND_STRING}" \
+        -append "${APPEND_STRING%* }" \
         -display none \
         -initrd "${ROOTFS}" \
         -kernel "${KERNEL}" \
