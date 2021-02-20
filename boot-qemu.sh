@@ -145,13 +145,14 @@ function setup_qemu_args() {
             ARCH=arm64
             KIMAGE=Image.gz
             APPEND_STRING+="console=ttyAMA0 "
-            if [[ "$(uname -m)" = "aarch64" && -e /dev/kvm ]]; then
-                ARM64_KVM_FLAGS=(-enable-kvm)
-            fi
             QEMU_ARCH_ARGS=(
-                "${ARM64_KVM_FLAGS[@]}"
                 -cpu max
-                -machine virt)
+                -machine "virt,gic-version=max")
+            if [[ "$(uname -m)" = "aarch64" && -e /dev/kvm ]]; then
+                QEMU_ARCH_ARGS+=(-enable-kvm)
+            else
+                QEMU_ARCH_ARGS+=(-machine "virtualization=true")
+            fi
             QEMU=(qemu-system-aarch64)
             ;;
 
