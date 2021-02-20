@@ -48,6 +48,10 @@ function parse_parameters() {
                 set -x
                 ;;
 
+            --debian)
+                DEBIAN=true
+                ;;
+
             -g | --gdb)
                 GDB=true
                 INTERACTIVE=true
@@ -90,6 +94,11 @@ function sanity_check() {
     [[ -z ${ARCH} ]] && die "Architecture ('-a') is required but not specified!"
     [[ -z ${KERNEL_LOCATION} ]] && die "Kernel image or kernel build folder ('-k') is required but not specified!"
 
+    # --debian requires --interactive
+    [[ -z ${DEBIAN} ]] && DEBIAN=false
+    [[ -z ${INTERACTIVE} ]] && INTERACTIVE=false
+    ${DEBIAN} && ! ${INTERACTIVE} && die "'--debian' requires '-i'/'--interactive'!"
+
     # KERNEL_LOCATION could be a relative path; turn it into an absolute one with readlink
     KERNEL_LOCATION=$(readlink -f "${KERNEL_LOCATION}")
 
@@ -103,11 +112,20 @@ function setup_qemu_args() {
     [[ ${ARCH} =~ arm32 ]] && ARCH_RTFS_DIR=arm
 
     IMAGES_DIR=${BASE}/images/${ARCH_RTFS_DIR:-${ARCH}}
-    ROOTFS=${IMAGES_DIR}/rootfs.cpio
+    if ${DEBIAN}; then
+        ROOTFS=${IMAGES_DIR}/debian.img
+        [[ -f ${ROOTFS} ]] || die "'--debian' requires a debian.img. Run 'sudo debian/build.sh -a ${IMAGES_DIR##*/}' to generate it."
+    else
+        ROOTFS=${IMAGES_DIR}/rootfs.cpio
+    fi
 
     APPEND_STRING=""
-    if ${INTERACTIVE:=false}; then
-        APPEND_STRING+="rdinit=/bin/sh "
+    if ${INTERACTIVE}; then
+        if ${DEBIAN}; then
+            APPEND_STRING+="root=/dev/vda "
+        else
+            APPEND_STRING+="rdinit=/bin/sh "
+        fi
     fi
     if ${GDB:=false}; then
         APPEND_STRING+="nokaslr "
@@ -137,8 +155,11 @@ function setup_qemu_args() {
         arm32_v7)
             ARCH=arm
             APPEND_STRING+="console=ttyAMA0 "
+            # https://lists.nongnu.org/archive/html/qemu-discuss/2018-08/msg00030.html
+            # VFS: Cannot open root device "vda" or unknown-block(0,0): error -6
+            ${DEBIAN} && HIGHMEM=,highmem=off
             QEMU_ARCH_ARGS=(
-                -machine virt
+                -machine "virt${HIGHMEM}"
                 -no-reboot
             )
             QEMU=(qemu-system-arm)
@@ -156,6 +177,11 @@ function setup_qemu_args() {
                 QEMU_ARCH_ARGS+=(-enable-kvm)
             else
                 QEMU_ARCH_ARGS+=(-machine "virtualization=true")
+            fi
+            if ${DEBIAN}; then
+                # Booting is so slow without these
+                QEMU_RAM=2G
+                QEMU_ARCH_ARGS+=(-smp 4)
             fi
             QEMU=(qemu-system-aarch64)
             ;;
@@ -282,13 +308,17 @@ function setup_qemu_args() {
 
 # Invoke QEMU
 function invoke_qemu() {
-    rm -rf "${ROOTFS}"
-    zstd -q -d "${ROOTFS}".zst -o "${ROOTFS}"
-
     green "QEMU location: " "$(dirname "$(command -v "${QEMU[*]}")")" '\n'
     green "QEMU version: " "$("${QEMU[@]}" --version | head -n1)" '\n'
 
     [[ -z ${QEMU_RAM} ]] && QEMU_RAM=512m
+    if ${DEBIAN}; then
+        QEMU+=(-drive "file=${ROOTFS},format=raw,if=virtio,index=0,media=disk")
+    else
+        rm -rf "${ROOTFS}"
+        zstd -q -d "${ROOTFS}".zst -o "${ROOTFS}"
+        QEMU+=(-initrd "${ROOTFS}")
+    fi
     if ${GDB:=false}; then
         while true; do
             if lsof -i:1234 &>/dev/null; then
@@ -301,7 +331,6 @@ function invoke_qemu() {
                 "${QEMU_ARCH_ARGS[@]}" \
                 -append "${APPEND_STRING%* }" \
                 -display none \
-                -initrd "${ROOTFS}" \
                 -kernel "${KERNEL}" \
                 -m "${QEMU_RAM}" \
                 -nodefaults \
@@ -329,7 +358,6 @@ function invoke_qemu() {
         "${QEMU_ARCH_ARGS[@]}" \
         -append "${APPEND_STRING%* }" \
         -display none \
-        -initrd "${ROOTFS}" \
         -kernel "${KERNEL}" \
         -m "${QEMU_RAM}" \
         -nodefaults \
