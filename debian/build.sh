@@ -43,7 +43,7 @@ function get_parameters() {
                         OUR_ARCH=${DEB_ARCH}
                         ;;
                     arm)
-                        DEB_ARCH=armhf
+                        DEB_ARCH=${1}hf
                         OUR_ARCH=${1}
                         ;;
                     ppc64le)
