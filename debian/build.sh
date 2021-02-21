@@ -6,18 +6,18 @@ trap 'umount "${MOUNT_DIR}" 2>/dev/null; rm -rf "${WORK_DIR}"' INT TERM EXIT
 function print_color() {
     # Reset escape code
     RST="\033[0m"
-    printf "\n%b%s%b\n" "${COLOR}" "${1}" "${RST}"
+    printf "\n%b%s%b\n" "${1}" "${2}" "${RST}"
 }
 
 # Prints an error message in bold red then exits
 function die() {
-    COLOR="\033[01;31m" print_color "${1}"
+    print_color "\033[01;31m" "${1}"
     exit "${2:-33}"
 }
 
 # Prints a warning message in bold yellow
 function warn() {
-    COLOR="\033[01;33m" print_color "${1}"
+    print_color "\033[01;33m" "${1}"
 }
 
 # The script requires root in several places, re-run the script with sudo if necessary
