@@ -50,6 +50,7 @@ function parse_parameters() {
 
             --debian)
                 DEBIAN=true
+                INTERACTIVE=true
                 ;;
 
             -g | --gdb)
@@ -94,10 +95,9 @@ function sanity_check() {
     [[ -z ${ARCH} ]] && die "Architecture ('-a') is required but not specified!"
     [[ -z ${KERNEL_LOCATION} ]] && die "Kernel image or kernel build folder ('-k') is required but not specified!"
 
-    # --debian requires --interactive
+    # Some default values
     [[ -z ${DEBIAN} ]] && DEBIAN=false
     [[ -z ${INTERACTIVE} ]] && INTERACTIVE=false
-    ${DEBIAN} && ! ${INTERACTIVE} && die "'--debian' requires '-i'/'--interactive'!"
 
     # KERNEL_LOCATION could be a relative path; turn it into an absolute one with readlink
     KERNEL_LOCATION=$(readlink -f "${KERNEL_LOCATION}")

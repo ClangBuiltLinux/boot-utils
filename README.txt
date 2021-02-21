@@ -39,8 +39,7 @@ Optional parameters:
 
     for more information on that script.
 
-    This option must be used with '-i'/'--interactive' to be useful and the
-    kernel should be built with the 'kvm_guest.config' target to boot
+    The kernel should be built with the 'kvm_guest.config' target to boot
     successfully. For example on an x86_64 host,
 
     $ make defconfig kvm_guest.config bzImage
