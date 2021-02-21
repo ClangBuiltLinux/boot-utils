@@ -162,24 +162,9 @@ function create_img() {
 
     # Install some problematic LTP testcases for debugging if requested
     if ${LTP}; then
-        LTP_SCRIPT=${MOUNT_DIR}/home/${DEB_USER}/ltp.sh
-        cat <<'EOF' >"${LTP_SCRIPT}"
-#!/usr/bin/env bash
-
-LTP=$(dirname "$(readlink -f "${0}")")/ltp
-
-git clone --depth=1 https://github.com/linux-test-project/ltp "${LTP}"
-
-cd "${LTP}" || exit ${?}
-
-make autotools
-./configure
-
-cd "${LTP}"/testcases/kernel/fs/proc && make -j$(nproc)
-cd "${LTP}"/testcases/kernel/fs/read_all && make -j$(nproc)
-cd "${LTP}"/testcases/lib && make -j$(nproc)
-EOF
-        chroot "${MOUNT_DIR}" bash "${LTP_SCRIPT##*${MOUNT_DIR}}"
+        LTP_SCRIPT=/home/${DEB_USER}/ltp.sh
+        cp -v "${DEBIAN}"/ltp.sh "${MOUNT_DIR}${LTP_SCRIPT}"
+        chroot "${MOUNT_DIR}" bash "${LTP_SCRIPT}"
         rm -rf "${LTP_SCRIPT}"
     fi
 
