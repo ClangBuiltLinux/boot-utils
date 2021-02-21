@@ -33,3 +33,7 @@ Optional parameters:
 
   -u | --user:
     The created user account's name. By default, it is just "user".
+
+  -v | --version:
+    The version of Debian to build. By default, it is the latest stable which
+    is currently Buster.

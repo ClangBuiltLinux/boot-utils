@@ -83,6 +83,10 @@ function get_parameters() {
                 shift
                 DEB_USER=${1}
                 ;;
+            -v | --version)
+                shift
+                DEB_VERSION=${1}
+                ;;
         esac
         shift
     done
@@ -107,6 +111,7 @@ function reality_checks() {
     is_available qemu-img
 
     # Default values
+    [[ -z ${DEB_VERSION} ]] && DEB_VERSION=buster
     [[ -z ${DEB_USER} ]] && DEB_USER=user
     [[ -z ${DEB_PASS} ]] && DEB_PASS=password
     [[ -z ${LTP} ]] && LTP=false
@@ -144,7 +149,7 @@ function create_img() {
         sudo
         vim
     )
-    qemu-debootstrap --arch "${DEB_ARCH}" --include="${PACKAGES[*]//${IFS:0:1}/,}" buster "${MOUNT_DIR}" || exit ${?}
+    qemu-debootstrap --arch "${DEB_ARCH}" --include="${PACKAGES[*]//${IFS:0:1}/,}" "${DEB_VERSION}" "${MOUNT_DIR}" || exit ${?}
 
     # Setup user account
     chroot "${MOUNT_DIR}" bash -c "useradd -m -G sudo ${DEB_USER} -s /bin/bash && echo ${DEB_USER}:${DEB_PASS} | chpasswd"
