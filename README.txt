@@ -37,7 +37,7 @@ Optional parameters:
 
     $ sudo debian/build.sh -h
 
-    for more information that script.
+    for more information on that script.
 
     This option must be used with '-i'/'--interactive' to be useful and the
     kernel should be built with the 'kvm_guest.config' target to boot
