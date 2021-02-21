@@ -319,6 +319,8 @@ function invoke_qemu() {
         zstd -q -d "${ROOTFS}".zst -o "${ROOTFS}"
         QEMU+=(-initrd "${ROOTFS}")
     fi
+    # Removing trailing space for aesthetic purposes
+    [[ -n ${APPEND_STRING} ]] && QEMU+=(-append "${APPEND_STRING%* }")
     if ${GDB:=false}; then
         while true; do
             if lsof -i:1234 &>/dev/null; then
@@ -329,7 +331,6 @@ function invoke_qemu() {
             # Note: no -serial mon:stdio
             "${QEMU[@]}" \
                 "${QEMU_ARCH_ARGS[@]}" \
-                -append "${APPEND_STRING%* }" \
                 -display none \
                 -kernel "${KERNEL}" \
                 -m "${QEMU_RAM}" \
@@ -356,7 +357,6 @@ function invoke_qemu() {
     set -x
     "${QEMU[@]}" \
         "${QEMU_ARCH_ARGS[@]}" \
-        -append "${APPEND_STRING%* }" \
         -display none \
         -kernel "${KERNEL}" \
         -m "${QEMU_RAM}" \
