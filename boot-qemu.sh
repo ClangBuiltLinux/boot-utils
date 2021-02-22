@@ -267,7 +267,7 @@ function setup_qemu_args() {
             esac
             ;;
     esac
-    if ${USE_CBL_QEMU:-false} && [[ ${ARCH} = "riscv" || ${ARCH} = "s390" ]]; then
+    if ${USE_CBL_QEMU:-false} && [[ ${ARCH} = "s390" ]]; then
         QEMU_BINARIES=${BASE}/qemu-binaries
 
         green "Downloading or updating qemu-binaries..."
