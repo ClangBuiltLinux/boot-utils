@@ -48,6 +48,11 @@ function parse_parameters() {
                 set -x
                 ;;
 
+            --debian)
+                DEBIAN=true
+                INTERACTIVE=true
+                ;;
+
             -g | --gdb)
                 GDB=true
                 INTERACTIVE=true
@@ -90,6 +95,10 @@ function sanity_check() {
     [[ -z ${ARCH} ]] && die "Architecture ('-a') is required but not specified!"
     [[ -z ${KERNEL_LOCATION} ]] && die "Kernel image or kernel build folder ('-k') is required but not specified!"
 
+    # Some default values
+    [[ -z ${DEBIAN} ]] && DEBIAN=false
+    [[ -z ${INTERACTIVE} ]] && INTERACTIVE=false
+
     # KERNEL_LOCATION could be a relative path; turn it into an absolute one with readlink
     KERNEL_LOCATION=$(readlink -f "${KERNEL_LOCATION}")
 
@@ -103,11 +112,20 @@ function setup_qemu_args() {
     [[ ${ARCH} =~ arm32 ]] && ARCH_RTFS_DIR=arm
 
     IMAGES_DIR=${BASE}/images/${ARCH_RTFS_DIR:-${ARCH}}
-    ROOTFS=${IMAGES_DIR}/rootfs.cpio
+    if ${DEBIAN}; then
+        ROOTFS=${IMAGES_DIR}/debian.img
+        [[ -f ${ROOTFS} ]] || die "'--debian' requires a debian.img. Run 'sudo debian/build.sh -a ${IMAGES_DIR##*/}' to generate it."
+    else
+        ROOTFS=${IMAGES_DIR}/rootfs.cpio
+    fi
 
     APPEND_STRING=""
-    if ${INTERACTIVE:=false}; then
-        APPEND_STRING+="rdinit=/bin/sh "
+    if ${INTERACTIVE}; then
+        if ${DEBIAN}; then
+            APPEND_STRING+="root=/dev/vda "
+        else
+            APPEND_STRING+="rdinit=/bin/sh "
+        fi
     fi
     if ${GDB:=false}; then
         APPEND_STRING+="nokaslr "
@@ -119,7 +137,8 @@ function setup_qemu_args() {
             DTB=aspeed-bmc-opp-palmetto.dtb
             QEMU_ARCH_ARGS=(
                 -machine palmetto-bmc
-                -no-reboot)
+                -no-reboot
+            )
             QEMU=(qemu-system-arm)
             ;;
 
@@ -128,16 +147,21 @@ function setup_qemu_args() {
             DTB=aspeed-bmc-opp-romulus.dtb
             QEMU_ARCH_ARGS=(
                 -machine romulus-bmc
-                -no-reboot)
+                -no-reboot
+            )
             QEMU=(qemu-system-arm)
             ;;
 
         arm32_v7)
             ARCH=arm
             APPEND_STRING+="console=ttyAMA0 "
+            # https://lists.nongnu.org/archive/html/qemu-discuss/2018-08/msg00030.html
+            # VFS: Cannot open root device "vda" or unknown-block(0,0): error -6
+            ${DEBIAN} && HIGHMEM=,highmem=off
             QEMU_ARCH_ARGS=(
-                -machine virt
-                -no-reboot)
+                -machine "virt${HIGHMEM}"
+                -no-reboot
+            )
             QEMU=(qemu-system-arm)
             ;;
 
@@ -145,14 +169,20 @@ function setup_qemu_args() {
             ARCH=arm64
             KIMAGE=Image.gz
             APPEND_STRING+="console=ttyAMA0 "
-            if [[ "$(uname -m)" = "aarch64" && -e /dev/kvm ]]; then
-                ARM64_CPU=host
-                ARM64_KVM_FLAGS=(-enable-kvm)
-            fi
             QEMU_ARCH_ARGS=(
-                "${ARM64_KVM_FLAGS[@]}"
-                -cpu "${ARM64_CPU:-max}"
-                -machine virt)
+                -cpu max
+                -machine "virt,gic-version=max"
+            )
+            if [[ "$(uname -m)" = "aarch64" && -e /dev/kvm ]]; then
+                QEMU_ARCH_ARGS+=(-enable-kvm)
+            else
+                QEMU_ARCH_ARGS+=(-machine "virtualization=true")
+            fi
+            if ${DEBIAN}; then
+                # Booting is so slow without these
+                QEMU_RAM=2G
+                QEMU_ARCH_ARGS+=(-smp 4)
+            fi
             QEMU=(qemu-system-aarch64)
             ;;
 
@@ -160,7 +190,8 @@ function setup_qemu_args() {
             KIMAGE=vmlinux
             QEMU_ARCH_ARGS=(
                 -cpu 24Kf
-                -machine malta)
+                -machine malta
+            )
             QEMU=(qemu-system-"${ARCH}")
             ARCH=mips
             ;;
@@ -171,7 +202,8 @@ function setup_qemu_args() {
             APPEND_STRING+="console=ttyS0 "
             QEMU_ARCH_ARGS=(
                 -machine bamboo
-                -no-reboot)
+                -no-reboot
+            )
             QEMU_RAM=128m
             QEMU=(qemu-system-ppc)
             ;;
@@ -181,7 +213,8 @@ function setup_qemu_args() {
             KIMAGE=vmlinux
             QEMU_ARCH_ARGS=(
                 -machine pseries
-                -vga none)
+                -vga none
+            )
             QEMU_RAM=1G
             QEMU=(qemu-system-ppc64)
             ;;
@@ -193,7 +226,8 @@ function setup_qemu_args() {
                 -device "ipmi-bmc-sim,id=bmc0"
                 -device "isa-ipmi-bt,bmc=bmc0,irq=10"
                 -L "${IMAGES_DIR}/" -bios skiboot.lid
-                -machine powernv)
+                -machine powernv
+            )
             QEMU_RAM=2G
             QEMU=(qemu-system-ppc64)
             ;;
@@ -219,8 +253,14 @@ function setup_qemu_args() {
             KIMAGE=bzImage
             APPEND_STRING+="console=ttyS0 "
             # Use KVM if the processor supports it and the KVM module is loaded (i.e. /dev/kvm exists)
-            [[ $(grep -c -E 'vmx|svm' /proc/cpuinfo) -gt 0 && -e /dev/kvm ]] &&
-                QEMU_ARCH_ARGS=("${QEMU_ARCH_ARGS[@]}" -cpu host -d "unimp,guest_errors" -enable-kvm -smp "$(nproc)")
+            if [[ $(grep -c -E 'vmx|svm' /proc/cpuinfo) -gt 0 && -e /dev/kvm ]]; then
+                QEMU_ARCH_ARGS=(
+                    -cpu host
+                    -d "unimp,guest_errors"
+                    -enable-kvm
+                    -smp "$(nproc)"
+                )
+            fi
             case ${ARCH} in
                 x86) QEMU=(qemu-system-i386) ;;
                 x86_64) QEMU=(qemu-system-x86_64) ;;
@@ -268,13 +308,19 @@ function setup_qemu_args() {
 
 # Invoke QEMU
 function invoke_qemu() {
-    rm -rf "${ROOTFS}"
-    zstd -q -d "${ROOTFS}".zst -o "${ROOTFS}"
-
     green "QEMU location: " "$(dirname "$(command -v "${QEMU[*]}")")" '\n'
     green "QEMU version: " "$("${QEMU[@]}" --version | head -n1)" '\n'
 
     [[ -z ${QEMU_RAM} ]] && QEMU_RAM=512m
+    if ${DEBIAN}; then
+        QEMU+=(-drive "file=${ROOTFS},format=raw,if=virtio,index=0,media=disk")
+    else
+        rm -rf "${ROOTFS}"
+        zstd -q -d "${ROOTFS}".zst -o "${ROOTFS}"
+        QEMU+=(-initrd "${ROOTFS}")
+    fi
+    # Removing trailing space for aesthetic purposes
+    [[ -n ${APPEND_STRING} ]] && QEMU+=(-append "${APPEND_STRING%* }")
     if ${GDB:=false}; then
         while true; do
             if lsof -i:1234 &>/dev/null; then
@@ -285,9 +331,7 @@ function invoke_qemu() {
             # Note: no -serial mon:stdio
             "${QEMU[@]}" \
                 "${QEMU_ARCH_ARGS[@]}" \
-                -append "${APPEND_STRING}" \
                 -display none \
-                -initrd "${ROOTFS}" \
                 -kernel "${KERNEL}" \
                 -m "${QEMU_RAM}" \
                 -nodefaults \
@@ -313,9 +357,7 @@ function invoke_qemu() {
     set -x
     "${QEMU[@]}" \
         "${QEMU_ARCH_ARGS[@]}" \
-        -append "${APPEND_STRING}" \
         -display none \
-        -initrd "${ROOTFS}" \
         -kernel "${KERNEL}" \
         -m "${QEMU_RAM}" \
         -nodefaults \

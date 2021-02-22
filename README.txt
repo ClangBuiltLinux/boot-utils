@@ -30,6 +30,22 @@ Optional parameters:
   -d | --debug:
     Invokes 'set -x' for debugging the script.
 
+  --debian:
+    By default, the script boots a very simple Busybox based root filesystem.
+    This option allows the script to boot a full Debian root filesystem,
+    which can be built using 'build.sh' in the debian folder. Run
+
+    $ sudo debian/build.sh -h
+
+    for more information on that script.
+
+    The kernel should be built with the 'kvm_guest.config' target to boot
+    successfully. For example on an x86_64 host,
+
+    $ make defconfig kvm_guest.config bzImage
+
+    will produce a bootable kernel image.
+
   -g | --gdb:
     Add '-s -S' to the QEMU invocation to allow debugging via GDB (will invoke
    `$GDB_BIN` env var else `gdb-multiarch`).
