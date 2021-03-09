@@ -72,8 +72,8 @@ function get_parameters() {
                 ;;
             -m | --modules-folder)
                 shift
-                MODULES_FOLDER=${1}
-                [[ -d ${MODULES_FOLDER} ]] || die "${MODULES_FOLDER} specified but it does not exist!"
+                MODULES_FOLDER="${1}"
+                [[ -d "${MODULES_FOLDER}" ]] || die "${MODULES_FOLDER} specified but it does not exist!"
                 ;;
             -p | --password)
                 shift
@@ -169,7 +169,7 @@ function create_img() {
     fi
 
     # Install modules if requested
-    [[ -n ${MODULES_FOLDER} ]] && cp -rv "${MODULES_FOLDER}" "${MOUNT_DIR}"/lib
+    [[ -n "${MODULES_FOLDER}" ]] && cp -rv "${MODULES_FOLDER}" "${MOUNT_DIR}"/lib
 
     # Unmount, move image, and clean up
     umount "${MOUNT_DIR}"
