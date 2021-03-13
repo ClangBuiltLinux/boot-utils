@@ -39,7 +39,7 @@ function parse_parameters() {
             -a | --arch | --architecture)
                 shift
                 case ${1} in
-                    arm32_v5 | arm32_v6 | arm32_v7 | arm64 | arm64be | mips | mipsel | ppc32 | ppc64 | ppc64le | riscv | s390 | x86 | x86_64) ARCH=${1} ;;
+                    arm32_v5 | arm32_v6 | arm32_v7 | arm64 | arm64be | m68k | mips | mipsel | ppc32 | ppc64 | ppc64le | riscv | s390 | x86 | x86_64) ARCH=${1} ;;
                     *) die "Invalid --arch value '${1}'" ;;
                 esac
                 ;;
@@ -185,6 +185,17 @@ function setup_qemu_args() {
                 QEMU_ARCH_ARGS+=(-smp 4)
             fi
             QEMU=(qemu-system-aarch64)
+            ;;
+
+        m68k)
+            APPEND_STRING+="console=ttyS0,115200 "
+            KIMAGE=vmlinux
+            QEMU_ARCH_ARGS=(
+                -cpu m68040
+                -M q800
+                -no-reboot
+            )
+            QEMU=(qemu-system-m68k)
             ;;
 
         mips | mipsel)
