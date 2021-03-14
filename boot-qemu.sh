@@ -261,6 +261,8 @@ function setup_qemu_args() {
                     -enable-kvm
                     -smp "$(nproc)"
                 )
+            else
+                QEMU_ARCH_ARGS=(-cpu Nehalem)
             fi
             case ${ARCH} in
                 x86) QEMU=(qemu-system-i386) ;;
