@@ -212,6 +212,7 @@ function setup_qemu_args() {
             ARCH=powerpc
             KIMAGE=vmlinux
             QEMU_ARCH_ARGS=(
+                -cpu power8
                 -machine pseries
                 -vga none
             )
@@ -226,7 +227,7 @@ function setup_qemu_args() {
                 -device "ipmi-bmc-sim,id=bmc0"
                 -device "isa-ipmi-bt,bmc=bmc0,irq=10"
                 -L "${IMAGES_DIR}/" -bios skiboot.lid
-                -machine powernv
+                -machine powernv8
             )
             QEMU_RAM=2G
             QEMU=(qemu-system-ppc64)
