@@ -41,13 +41,21 @@ done
 # Download latest LTS buildroot release
 BUILDROOT_VERSION=2020.11.2
 if [[ -d src ]]; then
-    if [[ $(cd src && make print-version | cut -d - -f 1 2>/dev/null) != "${BUILDROOT_VERSION}" ]]; then
+    # Make support/scripts/setlocalversion do nothing because we are in a git
+    # repository so it will return information about this repo, not Buildroot
+    echo >src/support/scripts/setlocalversion
+
+    INSTALLED_VERSION=$(cd src && make print-version | cut -d - -f 1 2>/dev/null)
+    if [[ "${INSTALLED_VERSION}" != "${BUILDROOT_VERSION}" ]]; then
         rm -rf src
         download_br
     fi
 else
     download_br
 fi
+# Patch buildroot with fakeroot fixes for newer glibc versions
+[[ ! -f src/package/fakeroot/0002-libfakeroot.c-define-_STAT_VER-if-not-already-define.patch ]] &&
+    curl -LSs https://github.com/buildroot/buildroot/commit/f45925a951318e9e53bead80b363e004301adc6f.patch | patch -d src -p1
 cd src || exit 1
 
 # Build the images for the architectures requested
