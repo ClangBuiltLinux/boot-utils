@@ -133,6 +133,7 @@ function setup_qemu_args() {
 
     case ${ARCH} in
         arm32_v5)
+            APPEND_STRING+="earlycon "
             ARCH=arm
             DTB=aspeed-bmc-opp-palmetto.dtb
             QEMU_ARCH_ARGS=(
@@ -143,6 +144,7 @@ function setup_qemu_args() {
             ;;
 
         arm32_v6)
+            APPEND_STRING+="earlycon "
             ARCH=arm
             DTB=aspeed-bmc-opp-romulus.dtb
             QEMU_ARCH_ARGS=(
@@ -154,7 +156,7 @@ function setup_qemu_args() {
 
         arm32_v7)
             ARCH=arm
-            APPEND_STRING+="console=ttyAMA0 "
+            APPEND_STRING+="console=ttyAMA0 earlycon "
             # https://lists.nongnu.org/archive/html/qemu-discuss/2018-08/msg00030.html
             # VFS: Cannot open root device "vda" or unknown-block(0,0): error -6
             ${DEBIAN} && HIGHMEM=,highmem=off
@@ -168,7 +170,7 @@ function setup_qemu_args() {
         arm64 | arm64be)
             ARCH=arm64
             KIMAGE=Image.gz
-            APPEND_STRING+="console=ttyAMA0 "
+            APPEND_STRING+="console=ttyAMA0 earlycon "
             QEMU_ARCH_ARGS=(
                 -cpu max
                 -machine "virt,gic-version=max"
@@ -234,6 +236,7 @@ function setup_qemu_args() {
             ;;
 
         riscv)
+            APPEND_STRING+="earlycon "
             KIMAGE=Image
             DEB_BIOS=/usr/lib/riscv64-linux-gnu/opensbi/qemu/virt/fw_jump.elf
             [[ -f ${DEB_BIOS} && -z ${BIOS} ]] && BIOS=${DEB_BIOS}
@@ -252,7 +255,7 @@ function setup_qemu_args() {
 
         x86 | x86_64)
             KIMAGE=bzImage
-            APPEND_STRING+="console=ttyS0 "
+            APPEND_STRING+="console=ttyS0 earlycon=uart8250,io,0x3f8 "
             # Use KVM if the processor supports it and the KVM module is loaded (i.e. /dev/kvm exists)
             if [[ $(grep -c -E 'vmx|svm' /proc/cpuinfo) -gt 0 && -e /dev/kvm ]]; then
                 QEMU_ARCH_ARGS=(
