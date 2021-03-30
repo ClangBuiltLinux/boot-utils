@@ -2,3 +2,5 @@
 
 cat /proc/version
 reboot
+
+exit 0

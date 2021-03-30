@@ -2,3 +2,5 @@
 
 cat /proc/version
 poweroff
+
+exit 0
