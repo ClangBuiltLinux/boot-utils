@@ -1,4 +1,6 @@
 #!/bin/sh
 
-cat /proc/version
-reboot
+if [ "$1" = "start" ]; then
+    cat /proc/version
+    reboot
+fi

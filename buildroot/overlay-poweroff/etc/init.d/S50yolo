@@ -1,4 +1,6 @@
 #!/bin/sh
 
-cat /proc/version
-poweroff
+if [ "$1" = "start" ]; then
+    cat /proc/version
+    poweroff
+fi
