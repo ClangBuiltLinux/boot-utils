@@ -105,9 +105,9 @@ function reality_checks() {
     # Some tools are in /usr/sbin or /sbin but they might not be in PATH by default
     [[ ${PATH} =~ /sbin ]] || PATH=${PATH}:/usr/sbin:/sbin
     is_available blkid
+    is_available debootstrap
     is_available findmnt
     is_available mkfs.ext4
-    is_available qemu-debootstrap
     is_available qemu-img
 
     # Default values
@@ -149,7 +149,7 @@ function create_img() {
         sudo
         vim
     )
-    qemu-debootstrap --arch "${DEB_ARCH}" --include="${PACKAGES[*]//${IFS:0:1}/,}" "${DEB_VERSION}" "${MOUNT_DIR}" || exit ${?}
+    debootstrap --arch "${DEB_ARCH}" --include="${PACKAGES[*]//${IFS:0:1}/,}" "${DEB_VERSION}" "${MOUNT_DIR}" || exit ${?}
 
     # Setup user account
     chroot "${MOUNT_DIR}" bash -c "useradd -m -G sudo ${DEB_USER} -s /bin/bash && echo ${DEB_USER}:${DEB_PASS} | chpasswd"
