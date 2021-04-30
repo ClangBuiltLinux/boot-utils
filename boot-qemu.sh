@@ -144,7 +144,6 @@ function setup_qemu_args() {
             ;;
 
         arm32_v6)
-            APPEND_STRING+="earlycon "
             ARCH=arm
             DTB=aspeed-bmc-opp-romulus.dtb
             QEMU_ARCH_ARGS=(
