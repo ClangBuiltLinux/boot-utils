@@ -73,6 +73,10 @@ function parse_parameters() {
                 shift && KERNEL_LOCATION=${1}
                 ;;
 
+            --no-kvm)
+                KVM=false
+                ;;
+
             -t | --timeout)
                 shift && TIMEOUT=${1}
                 ;;
@@ -98,6 +102,7 @@ function sanity_check() {
     # Some default values
     [[ -z ${DEBIAN} ]] && DEBIAN=false
     [[ -z ${INTERACTIVE} ]] && INTERACTIVE=false
+    [[ -z ${KVM} ]] && KVM=true
 
     # KERNEL_LOCATION could be a relative path; turn it into an absolute one with readlink
     KERNEL_LOCATION=$(readlink -f "${KERNEL_LOCATION}")
@@ -174,7 +179,7 @@ function setup_qemu_args() {
                 -cpu max
                 -machine "virt,gic-version=max"
             )
-            if [[ "$(uname -m)" = "aarch64" && -e /dev/kvm ]]; then
+            if [[ "$(uname -m)" = "aarch64" && -e /dev/kvm ]] && ${KVM}; then
                 QEMU_ARCH_ARGS+=(-enable-kvm)
             else
                 QEMU_ARCH_ARGS+=(-machine "virtualization=true")
@@ -267,7 +272,7 @@ function setup_qemu_args() {
             KIMAGE=bzImage
             APPEND_STRING+="console=ttyS0 earlycon=uart8250,io,0x3f8 "
             # Use KVM if the processor supports it and the KVM module is loaded (i.e. /dev/kvm exists)
-            if [[ $(grep -c -E 'vmx|svm' /proc/cpuinfo) -gt 0 && -e /dev/kvm ]]; then
+            if [[ $(grep -c -E 'vmx|svm' /proc/cpuinfo) -gt 0 && -e /dev/kvm ]] && ${KVM}; then
                 QEMU_ARCH_ARGS=(
                     -cpu host
                     -d "unimp,guest_errors"
