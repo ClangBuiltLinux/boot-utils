@@ -62,6 +62,13 @@ Optional parameters:
     shell. When this is set, there is no timeout so any value supplied
     via the script's -t option is ignored.
 
+  --no-kvm:
+    By default, the script passes '-enable-kvm' to QEMU for hardware
+    virtualization support if the host machine supports it. The option
+    prevents that, causing QEMU to fallback to software virtualization.
+    This can be useful for reproducing certain bugs but booting kernels
+    will be much slower.
+
   -t | --timeout:
     By default, the timeout command waits 3 minutes before killing the
     QEMU machine. Depending on the power of the host machine, this might
