@@ -77,6 +77,10 @@ function parse_parameters() {
                 KVM=false
                 ;;
 
+            -s | --smp)
+                shift && SMP=${1}
+                ;;
+
             -t | --timeout)
                 shift && TIMEOUT=${1}
                 ;;
@@ -187,7 +191,7 @@ function setup_qemu_args() {
             if ${DEBIAN}; then
                 # Booting is so slow without these
                 QEMU_RAM=2G
-                QEMU_ARCH_ARGS+=(-smp 4)
+                QEMU_ARCH_ARGS+=(-smp "${SMP:-4}")
             fi
             QEMU=(qemu-system-aarch64)
             ;;
@@ -277,7 +281,7 @@ function setup_qemu_args() {
                     -cpu host
                     -d "unimp,guest_errors"
                     -enable-kvm
-                    -smp "$(nproc)"
+                    -smp "${SMP:-$(nproc)}"
                 )
             else
                 QEMU_ARCH_ARGS=(-cpu Nehalem)
@@ -342,6 +346,9 @@ function invoke_qemu() {
     fi
     # Removing trailing space for aesthetic purposes
     [[ -n ${APPEND_STRING} ]] && QEMU+=(-append "${APPEND_STRING%* }")
+    if [[ -n ${SMP} ]] && ! echo "${QEMU_ARCH_ARGS[*]}" | grep -q "smp"; then
+        QEMU+=(-smp "${SMP}")
+    fi
     if ${GDB:=false}; then
         while true; do
             if lsof -i:1234 &>/dev/null; then
