@@ -69,6 +69,14 @@ Optional parameters:
     This can be useful for reproducing certain bugs but booting kernels
     will be much slower.
 
+  -s | --smp:
+    By default, the script does not specify a number of cores for the
+    QEMU machine, which usually means it spawns with only one core.
+    Certain features such as the KCSAN KUnit tests require multiple cores
+    to work so this value will be used for the number of cores for the
+    virtual machine. It can be more than the number of processors on your
+    host machine.
+
   -t | --timeout:
     By default, the timeout command waits 3 minutes before killing the
     QEMU machine. Depending on the power of the host machine, this might
