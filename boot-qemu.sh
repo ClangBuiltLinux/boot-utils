@@ -382,7 +382,7 @@ function invoke_qemu() {
         done
     fi
 
-    ${INTERACTIVE} || QEMU=(timeout --foreground "${TIMEOUT:=3m}" unbuffer "${QEMU[@]}")
+    ${INTERACTIVE} || QEMU=(timeout --foreground "${TIMEOUT:=3m}" stdbuf -oL -eL "${QEMU[@]}")
     set -x
     "${QEMU[@]}" \
         "${QEMU_ARCH_ARGS[@]}" \
