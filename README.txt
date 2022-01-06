@@ -82,11 +82,3 @@ Optional parameters:
     QEMU machine. Depending on the power of the host machine, this might
     not be long enough for a kernel to boot so this allows that timeout
     to be configured. Takes the value passed to timeout (e.g. 30s or 4m).
-
-  --use-cbl-qemu (only relevant with '-a s390'):
-    s390 only boots with patches that are available in QEMU master. It
-    could take a while for those patches to make it to various
-    distribution versions of qemu-system-s390.
-
-    This option downloads https://github.com/ClangBuiltLinux/qemu-binaries
-    here and decompresses the binary to use it.
