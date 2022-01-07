@@ -85,10 +85,6 @@ function parse_parameters() {
                 shift && TIMEOUT=${1}
                 ;;
 
-            --use-cbl-qemu)
-                USE_CBL_QEMU=true
-                ;;
-
             *)
                 die "Invalid parameter '${1}'"
                 ;;
@@ -292,18 +288,6 @@ function setup_qemu_args() {
             esac
             ;;
     esac
-    if ${USE_CBL_QEMU:-false} && [[ ${ARCH} = "s390" ]]; then
-        QEMU_BINARIES=${BASE}/qemu-binaries
-
-        green "Downloading or updating qemu-binaries..."
-        [[ -d ${QEMU_BINARIES} ]] || git clone https://github.com/ClangBuiltLinux/qemu-binaries "${QEMU_BINARIES}"
-        git -C "${QEMU_BINARIES}" pull --rebase
-
-        QEMU_BIN=${QEMU_BINARIES}/bin
-        QEMU_BINARY=${QEMU_BIN}/${QEMU[*]}
-        zstd -q -d "${QEMU_BINARY}".zst -o "${QEMU_BINARY}" || die "Error decompressing ${QEMU[*]}"
-        export PATH=${QEMU_BIN}:${PATH}
-    fi
     checkbin "${QEMU[*]}"
 
     # If '-k' is an path that ends in the kernel image, we can just use it directly
