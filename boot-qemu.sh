@@ -168,7 +168,19 @@ function setup_qemu_args() {
                 -machine "virt${HIGHMEM}"
                 -no-reboot
             )
-            QEMU=(qemu-system-arm)
+            # It is possible to boot ARMv7 kernels under KVM on AArch64 hosts,
+            # if it is supported. ARMv7 KVM support was ripped out of the
+            # kernel in 5.7 so we don't even bother checking.
+            if [[ "$(uname -m)" = "aarch64" && -e /dev/kvm ]] && ${KVM} &&
+                "${BASE}"/utils/aarch64_32_bit_el1_supported; then
+                QEMU_ARCH_ARGS+=(
+                    -cpu "host,aarch64=off"
+                    -enable-kvm
+                )
+                QEMU=(qemu-system-aarch64)
+            else
+                QEMU=(qemu-system-arm)
+            fi
             ;;
 
         arm64 | arm64be)
