@@ -39,7 +39,7 @@ function parse_parameters() {
             -a | --arch | --architecture)
                 shift
                 case ${1} in
-                    arm32_v5 | arm32_v6 | arm32_v7 | arm64 | arm64be | m68k | mips | mipsel | ppc32 | ppc64 | ppc64le | riscv | s390 | x86 | x86_64) ARCH=${1} ;;
+                    arm | arm32_v5 | arm32_v6 | arm32_v7 | arm64 | arm64be | m68k | mips | mipsel | ppc32 | ppc64 | ppc64le | riscv | s390 | x86 | x86_64) ARCH=${1} ;;
                     *) die "Invalid --arch value '${1}'" ;;
                 esac
                 ;;
@@ -158,7 +158,7 @@ function setup_qemu_args() {
             QEMU=(qemu-system-arm)
             ;;
 
-        arm32_v7)
+        arm | arm32_v7)
             ARCH=arm
             APPEND_STRING+="console=ttyAMA0 earlycon "
             # https://lists.nongnu.org/archive/html/qemu-discuss/2018-08/msg00030.html

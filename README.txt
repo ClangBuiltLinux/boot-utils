@@ -8,6 +8,7 @@ Required parameters:
        * arm32_v5
        * arm32_v6
        * arm32_v7
+       * arm (shorthand for arm32_v7)
        * arm64
        * arm64be
        * m68k
