@@ -39,7 +39,7 @@ function parse_parameters() {
             -a | --arch | --architecture)
                 shift
                 case ${1} in
-                    arm | arm32_v5 | arm32_v6 | arm32_v7 | arm64 | arm64be | m68k | mips | mipsel | ppc32 | ppc64 | ppc64le | riscv | s390 | x86 | x86_64) ARCH=${1} ;;
+                    arm | arm32_v5 | arm32_v6 | arm32_v7 | arm64 | arm64be | m68k | mips | mipsel | ppc32 | ppc32_mac | ppc64 | ppc64le | riscv | s390 | x86 | x86_64) ARCH=${1} ;;
                     *) die "Invalid --arch value '${1}'" ;;
                 esac
                 ;;
@@ -115,6 +115,8 @@ function sanity_check() {
 function setup_qemu_args() {
     # All arm32_* options share the same rootfs, under images/arm
     [[ ${ARCH} =~ arm32 ]] && ARCH_RTFS_DIR=arm
+    # All ppc32_* options share the same rootfs, under images/ppc32
+    [[ ${ARCH} =~ ppc32 ]] && ARCH_RTFS_DIR=ppc32
 
     IMAGES_DIR=${BASE}/images/${ARCH_RTFS_DIR:-${ARCH}}
     if ${DEBIAN}; then
@@ -225,14 +227,20 @@ function setup_qemu_args() {
             ARCH=mips
             ;;
 
-        ppc32)
+        ppc32 | ppc32_mac)
+            case ${ARCH} in
+                ppc32)
+                    KIMAGE=uImage
+                    QEMU_ARCH_ARGS=(-machine bamboo)
+                    ;;
+                ppc32_mac)
+                    KIMAGE=vmlinux
+                    QEMU_ARCH_ARGS=(-machine mac99)
+                    ;;
+            esac
             ARCH=powerpc
-            KIMAGE=uImage
             APPEND_STRING+="console=ttyS0 "
-            QEMU_ARCH_ARGS=(
-                -machine bamboo
-                -no-reboot
-            )
+            QEMU_ARCH_ARGS+=(-no-reboot)
             QEMU_RAM=128m
             QEMU=(qemu-system-ppc)
             ;;
