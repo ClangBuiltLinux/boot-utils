@@ -111,7 +111,7 @@ function reality_checks() {
     is_available qemu-img
 
     # Default values
-    [[ -z ${DEB_VERSION} ]] && DEB_VERSION=buster
+    [[ -z ${DEB_VERSION} ]] && DEB_VERSION=bullseye
     [[ -z ${DEB_USER} ]] && DEB_USER=user
     [[ -z ${DEB_PASS} ]] && DEB_PASS=password
     [[ -z ${LTP} ]] && LTP=false
