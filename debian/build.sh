@@ -111,7 +111,7 @@ function reality_checks() {
     is_available qemu-img
 
     # Default values
-    [[ -z ${DEB_VERSION} ]] && DEB_VERSION=buster
+    [[ -z ${DEB_VERSION} ]] && DEB_VERSION=bullseye
     [[ -z ${DEB_USER} ]] && DEB_USER=user
     [[ -z ${DEB_PASS} ]] && DEB_PASS=password
     [[ -z ${LTP} ]] && LTP=false
@@ -158,7 +158,7 @@ function create_img() {
     printf "UUID=%s\t/\text4\terrors=remount-ro\t0\t1\n" "$(blkid -o value -s UUID "$(findmnt -n -o SOURCE "${MOUNT_DIR}")")" | tee -a "${MOUNT_DIR}"/etc/fstab
 
     # Add hostname entry to /etc/hosts so sudo does not complain
-    printf "127.0.0.1\t%s\n" "$(hostname)" | tee -a "${MOUNT_DIR}"/etc/hosts
+    printf "127.0.0.1\t%s\n" "$(uname -n)" | tee -a "${MOUNT_DIR}"/etc/hosts
 
     # Install some problematic LTP testcases for debugging if requested
     if ${LTP}; then
