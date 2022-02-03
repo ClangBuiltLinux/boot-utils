@@ -15,6 +15,7 @@ Required parameters:
        * mips
        * mipsel
        * ppc32
+       * ppc32_mac
        * ppc64
        * ppc64le
        * riscv
