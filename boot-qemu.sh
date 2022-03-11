@@ -300,7 +300,7 @@ function setup_qemu_args() {
                     -smp "${SMP:-$(nproc)}"
                 )
             else
-                QEMU_ARCH_ARGS=(-cpu Nehalem)
+                [[ ${ARCH} = "x86_64" ]] && QEMU_ARCH_ARGS=(-cpu Nehalem)
             fi
             case ${ARCH} in
                 x86) QEMU=(qemu-system-i386) ;;
