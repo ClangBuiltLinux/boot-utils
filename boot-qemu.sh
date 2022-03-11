@@ -222,6 +222,7 @@ function setup_qemu_args() {
                 QEMU_ARCH_ARGS+=(
                     -cpu "host,aarch64=off"
                     -enable-kvm
+                    -smp "${SMP:-$(get_default_smp_value)}"
                 )
                 QEMU=(qemu-system-aarch64)
             else
@@ -238,14 +239,19 @@ function setup_qemu_args() {
                 -machine "virt,gic-version=max"
             )
             if [[ "$(uname -m)" = "aarch64" && -e /dev/kvm ]] && ${KVM}; then
-                QEMU_ARCH_ARGS+=(-enable-kvm)
+                QEMU_ARCH_ARGS+=(
+                    -enable-kvm
+                    -smp "${SMP:-$(get_default_smp_value)}"
+                )
             else
                 QEMU_ARCH_ARGS+=(-machine "virtualization=true")
             fi
             if ${DEBIAN}; then
                 # Booting is so slow without these
                 QEMU_RAM=2G
-                QEMU_ARCH_ARGS+=(-smp "${SMP:-4}")
+                if ! echo "${QEMU_ARCH_ARGS[*]}" | grep -q smp; then
+                    QEMU_ARCH_ARGS+=(-smp "${SMP:-4}")
+                fi
             fi
             QEMU=(qemu-system-aarch64)
             ;;
