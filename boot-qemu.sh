@@ -111,6 +111,50 @@ function sanity_check() {
     checkbin zstd
 }
 
+function get_default_smp_value() {
+    # KERNEL_LOCATION is either a path to the kernel source or a full kernel
+    # location. If it is a file, we need to strip off the basename so that we
+    # can easily navigate around with '..'.
+    if [[ -f ${KERNEL_LOCATION} ]]; then
+        KERNEL_DIRNAME=$(dirname "${KERNEL_LOCATION}")
+    else
+        KERNEL_DIRNAME=${KERNEL_LOCATION}
+    fi
+
+    # If KERNEL_LOCATION is the kernel source, the configuration will be at
+    # ${KERNEL_DIRNAME}/.config
+    #
+    # If KERNEL_LOCATION is a full kernel location, it could either be:
+    #   * ${KERNEL_DIRNAME}/.config (if the image is vmlinux)
+    #   * ${KERNEL_DIRNAME}/../../../.config (if the image is in arch/*/boot/)
+    #   * ${KERNEL_DIRNAME}/config (if the image is in a TuxMake folder)
+    for CONFIG_LOCATION in .config ../../../.config config; do
+        CONFIG_FILE=$(readlink -f "${KERNEL_DIRNAME}/${CONFIG_LOCATION}")
+        if [[ -f ${CONFIG_FILE} ]]; then
+            HAS_CONFIG=true
+            break
+        fi
+    done
+
+    if ${HAS_CONFIG:=false}; then
+        CONFIG_NR_CPUS=$(grep "^CONFIG_NR_CPUS=" "${CONFIG_FILE}" | cut -d= -f2)
+    fi
+
+    if [[ -z ${CONFIG_NR_CPUS} ]]; then
+        # Sensible default value based on treewide defaults for CONFIG_NR_CPUS.
+        CONFIG_NR_CPUS=8
+    fi
+
+    # Use the minimum of the number of processors in the system or
+    # CONFIG_NR_CPUS.
+    CPUS=$(nproc)
+    if [[ ${CPUS} -gt ${CONFIG_NR_CPUS} ]]; then
+        echo "${CONFIG_NR_CPUS}"
+    else
+        echo "${CPUS}"
+    fi
+}
+
 # Boot QEMU
 function setup_qemu_args() {
     # All arm32_* options share the same rootfs, under images/arm
@@ -297,7 +341,7 @@ function setup_qemu_args() {
                     -cpu host
                     -d "unimp,guest_errors"
                     -enable-kvm
-                    -smp "${SMP:-$(nproc)}"
+                    -smp "${SMP:-$(get_default_smp_value)}"
                 )
             else
                 [[ ${ARCH} = "x86_64" ]] && QEMU_ARCH_ARGS=(-cpu Nehalem)
