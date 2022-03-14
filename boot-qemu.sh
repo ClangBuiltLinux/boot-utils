@@ -177,6 +177,14 @@ function get_qemu_ver_code() {
     printf "%d%02d%02d" "${QEMU_VER[@]}"
 }
 
+# Print Linux version of a kernel image as a six or seven digit number
+# Takes the command to dump a kernel image to stdout as its argument
+function get_lnx_ver_code() {
+    LINUX_VER="$("${@}" |& strings |& grep -E "^Linux version [0-9]\.[0-9]+\.[0-9]+" | cut -d ' ' -f 3 | cut -d - -f 1)"
+    IFS=. read -ra LINUX_VER <<<"${LINUX_VER}"
+    printf "%d%02d%03d" "${LINUX_VER[@]}"
+}
+
 # Boot QEMU
 function setup_qemu_args() {
     # All arm32_* options share the same rootfs, under images/arm
