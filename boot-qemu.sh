@@ -267,9 +267,16 @@ function setup_qemu_args() {
         arm64 | arm64be)
             ARCH=arm64
             KIMAGE=Image.gz
+            QEMU=(qemu-system-aarch64)
+            get_full_kernel_path
+            # https://gitlab.com/qemu-project/qemu/-/commit/69b2265d5fe8e0f401d75e175e0a243a7d505e53
+            if [[ $(get_lnx_ver_code gzip -c -d "${KERNEL}") -lt 512000 ]] &&
+                [[ $(get_qemu_ver_code) -ge 602050 ]]; then
+                LPA2=,lpa2=off
+            fi
             APPEND_STRING+="console=ttyAMA0 earlycon "
             QEMU_ARCH_ARGS=(
-                -cpu max
+                -cpu "max${LPA2}"
                 -machine "virt,gic-version=max"
             )
             if [[ "$(uname -m)" = "aarch64" && -e /dev/kvm ]] && ${KVM}; then
@@ -291,7 +298,6 @@ function setup_qemu_args() {
                     QEMU_ARCH_ARGS+=(-smp "${SMP:-4}")
                 fi
             fi
-            QEMU=(qemu-system-aarch64)
             ;;
 
         m68k)
