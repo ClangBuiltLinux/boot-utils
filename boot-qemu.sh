@@ -155,6 +155,21 @@ function get_default_smp_value() {
     fi
 }
 
+# Expands '-k' to an absolute path to a kernel image if necessary
+function get_full_kernel_path() {
+    # If '-k' is an path that ends in the kernel image, we can just use it directly
+    if [[ ${KERNEL_LOCATION##*/} = "${KIMAGE:=zImage}" ]]; then
+        KERNEL=${KERNEL_LOCATION}
+    # If not though, we need to find it based on the kernel build directory
+    else
+        # If the image is an uncompressed vmlinux, it is in the root of the build folder
+        # Otherwise, it is in the architecture's boot directory
+        [[ ${KIMAGE} == "vmlinux" ]] || BOOT_DIR=arch/${ARCH}/boot/
+        KERNEL=${KERNEL_LOCATION}/${BOOT_DIR}${KIMAGE}
+    fi
+    [[ -f ${KERNEL} ]] || die "${KERNEL} does not exist!"
+}
+
 # Boot QEMU
 function setup_qemu_args() {
     # All arm32_* options share the same rootfs, under images/arm
@@ -364,17 +379,8 @@ function setup_qemu_args() {
     esac
     checkbin "${QEMU[*]}"
 
-    # If '-k' is an path that ends in the kernel image, we can just use it directly
-    if [[ ${KERNEL_LOCATION##*/} = "${KIMAGE:=zImage}" ]]; then
-        KERNEL=${KERNEL_LOCATION}
-    # If not though, we need to find it based on the kernel build directory
-    else
-        # If the image is an uncompressed vmlinux, it is in the root of the build folder
-        # Otherwise, it is in the architecture's boot directory
-        [[ ${KIMAGE} == "vmlinux" ]] || BOOT_DIR=arch/${ARCH}/boot/
-        KERNEL=${KERNEL_LOCATION}/${BOOT_DIR}${KIMAGE}
-    fi
-    [[ -f ${KERNEL} ]] || die "${KERNEL} does not exist!"
+    [[ -z ${KERNEL} ]] && get_full_kernel_path
+
     if [[ -n ${DTB} ]]; then
         # If we are in a boot folder, look for them in the dts folder in it
         if [[ $(basename "${KERNEL%/*}") = "boot" ]]; then
