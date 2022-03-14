@@ -170,19 +170,23 @@ function get_full_kernel_path() {
     [[ -f ${KERNEL} ]] || die "${KERNEL} does not exist!"
 }
 
-# Print QEMU version as a five or six digit number
+# Takes a version (x.y.z) and prints a six or seven digit number
+# For example, QEMU 6.2.50 would become 602050 and Linux 5.10.100
+# would become 510100
+function print_ver_code() {
+    IFS=. read -ra VER_CODE <<<"${1}"
+    printf "%d%02d%03d" "${VER_CODE[@]}"
+}
+
+# Print QEMU version as a six or seven digit number
 function get_qemu_ver_code() {
-    QEMU_VER=$("${QEMU[@]}" --version | head -1 | cut -d ' ' -f 4)
-    IFS=. read -ra QEMU_VER <<<"${QEMU_VER}"
-    printf "%d%02d%02d" "${QEMU_VER[@]}"
+    print_ver_code "$("${QEMU[@]}" --version | head -1 | cut -d ' ' -f 4)"
 }
 
 # Print Linux version of a kernel image as a six or seven digit number
 # Takes the command to dump a kernel image to stdout as its argument
 function get_lnx_ver_code() {
-    LINUX_VER="$("${@}" |& strings |& grep -E "^Linux version [0-9]\.[0-9]+\.[0-9]+" | cut -d ' ' -f 3 | cut -d - -f 1)"
-    IFS=. read -ra LINUX_VER <<<"${LINUX_VER}"
-    printf "%d%02d%03d" "${LINUX_VER[@]}"
+    print_ver_code "$("${@}" |& strings |& grep -E "^Linux version [0-9]\.[0-9]+\.[0-9]+" | cut -d ' ' -f 3 | cut -d - -f 1)"
 }
 
 # Boot QEMU
