@@ -170,6 +170,13 @@ function get_full_kernel_path() {
     [[ -f ${KERNEL} ]] || die "${KERNEL} does not exist!"
 }
 
+# Print QEMU version as a five or six digit number
+function get_qemu_ver_code() {
+    QEMU_VER=$("${QEMU[@]}" --version | head -1 | cut -d ' ' -f 4)
+    IFS=. read -ra QEMU_VER <<<"${QEMU_VER}"
+    printf "%d%02d%02d" "${QEMU_VER[@]}"
+}
+
 # Boot QEMU
 function setup_qemu_args() {
     # All arm32_* options share the same rootfs, under images/arm
