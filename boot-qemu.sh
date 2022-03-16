@@ -246,9 +246,13 @@ function setup_qemu_args() {
             else
                 QEMU_ARCH_ARGS+=(-machine "virtualization=true")
             fi
+            # Give the machine more cores and memory when booting Debian to
+            # improve performance
             if ${DEBIAN}; then
-                # Booting is so slow without these
                 QEMU_RAM=2G
+                # Do not add '-smp' if it is present at this point, as that
+                # means that KVM is being used, which will already have a
+                # suitable number of cores
                 if ! echo "${QEMU_ARCH_ARGS[*]}" | grep -q smp; then
                     QEMU_ARCH_ARGS+=(-smp "${SMP:-4}")
                 fi
