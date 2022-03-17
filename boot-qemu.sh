@@ -155,6 +155,40 @@ function get_default_smp_value() {
     fi
 }
 
+# Expands '-k' to an absolute path to a kernel image if necessary
+function get_full_kernel_path() {
+    # If '-k' is an path that ends in the kernel image, we can just use it directly
+    if [[ ${KERNEL_LOCATION##*/} = "${KIMAGE:=zImage}" ]]; then
+        KERNEL=${KERNEL_LOCATION}
+    # If not though, we need to find it based on the kernel build directory
+    else
+        # If the image is an uncompressed vmlinux, it is in the root of the build folder
+        # Otherwise, it is in the architecture's boot directory
+        [[ ${KIMAGE} == "vmlinux" ]] || BOOT_DIR=arch/${ARCH}/boot/
+        KERNEL=${KERNEL_LOCATION}/${BOOT_DIR}${KIMAGE}
+    fi
+    [[ -f ${KERNEL} ]] || die "${KERNEL} does not exist!"
+}
+
+# Takes a version (x.y.z) and prints a six or seven digit number
+# For example, QEMU 6.2.50 would become 602050 and Linux 5.10.100
+# would become 510100
+function print_ver_code() {
+    IFS=. read -ra VER_CODE <<<"${1}"
+    printf "%d%02d%03d" "${VER_CODE[@]}"
+}
+
+# Print QEMU version as a six or seven digit number
+function get_qemu_ver_code() {
+    print_ver_code "$("${QEMU[@]}" --version | head -1 | cut -d ' ' -f 4)"
+}
+
+# Print Linux version of a kernel image as a six or seven digit number
+# Takes the command to dump a kernel image to stdout as its argument
+function get_lnx_ver_code() {
+    print_ver_code "$("${@}" |& strings |& grep -E "^Linux version [0-9]\.[0-9]+\.[0-9]+" | cut -d ' ' -f 3 | cut -d - -f 1)"
+}
+
 # Boot QEMU
 function setup_qemu_args() {
     # All arm32_* options share the same rootfs, under images/arm
@@ -233,9 +267,16 @@ function setup_qemu_args() {
         arm64 | arm64be)
             ARCH=arm64
             KIMAGE=Image.gz
+            QEMU=(qemu-system-aarch64)
+            get_full_kernel_path
+            # https://gitlab.com/qemu-project/qemu/-/commit/69b2265d5fe8e0f401d75e175e0a243a7d505e53
+            if [[ $(get_lnx_ver_code gzip -c -d "${KERNEL}") -lt 512000 ]] &&
+                [[ $(get_qemu_ver_code) -ge 602050 ]]; then
+                LPA2=,lpa2=off
+            fi
             APPEND_STRING+="console=ttyAMA0 earlycon "
             QEMU_ARCH_ARGS=(
-                -cpu max
+                -cpu "max${LPA2}"
                 -machine "virt,gic-version=max"
             )
             if [[ "$(uname -m)" = "aarch64" && -e /dev/kvm ]] && ${KVM}; then
@@ -257,7 +298,6 @@ function setup_qemu_args() {
                     QEMU_ARCH_ARGS+=(-smp "${SMP:-4}")
                 fi
             fi
-            QEMU=(qemu-system-aarch64)
             ;;
 
         m68k)
@@ -364,17 +404,8 @@ function setup_qemu_args() {
     esac
     checkbin "${QEMU[*]}"
 
-    # If '-k' is an path that ends in the kernel image, we can just use it directly
-    if [[ ${KERNEL_LOCATION##*/} = "${KIMAGE:=zImage}" ]]; then
-        KERNEL=${KERNEL_LOCATION}
-    # If not though, we need to find it based on the kernel build directory
-    else
-        # If the image is an uncompressed vmlinux, it is in the root of the build folder
-        # Otherwise, it is in the architecture's boot directory
-        [[ ${KIMAGE} == "vmlinux" ]] || BOOT_DIR=arch/${ARCH}/boot/
-        KERNEL=${KERNEL_LOCATION}/${BOOT_DIR}${KIMAGE}
-    fi
-    [[ -f ${KERNEL} ]] || die "${KERNEL} does not exist!"
+    [[ -z ${KERNEL} ]] && get_full_kernel_path
+
     if [[ -n ${DTB} ]]; then
         # If we are in a boot folder, look for them in the dts folder in it
         if [[ $(basename "${KERNEL%/*}") = "boot" ]]; then
