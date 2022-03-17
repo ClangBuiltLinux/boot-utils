@@ -111,6 +111,50 @@ function sanity_check() {
     checkbin zstd
 }
 
+function get_default_smp_value() {
+    # KERNEL_LOCATION is either a path to the kernel source or a full kernel
+    # location. If it is a file, we need to strip off the basename so that we
+    # can easily navigate around with '..'.
+    if [[ -f ${KERNEL_LOCATION} ]]; then
+        KERNEL_DIRNAME=$(dirname "${KERNEL_LOCATION}")
+    else
+        KERNEL_DIRNAME=${KERNEL_LOCATION}
+    fi
+
+    # If KERNEL_LOCATION is the kernel source, the configuration will be at
+    # ${KERNEL_DIRNAME}/.config
+    #
+    # If KERNEL_LOCATION is a full kernel location, it could either be:
+    #   * ${KERNEL_DIRNAME}/.config (if the image is vmlinux)
+    #   * ${KERNEL_DIRNAME}/../../../.config (if the image is in arch/*/boot/)
+    #   * ${KERNEL_DIRNAME}/config (if the image is in a TuxMake folder)
+    for CONFIG_LOCATION in .config ../../../.config config; do
+        CONFIG_FILE=$(readlink -f "${KERNEL_DIRNAME}/${CONFIG_LOCATION}")
+        if [[ -f ${CONFIG_FILE} ]]; then
+            HAS_CONFIG=true
+            break
+        fi
+    done
+
+    if ${HAS_CONFIG:=false}; then
+        CONFIG_NR_CPUS=$(grep "^CONFIG_NR_CPUS=" "${CONFIG_FILE}" | cut -d= -f2)
+    fi
+
+    if [[ -z ${CONFIG_NR_CPUS} ]]; then
+        # Sensible default value based on treewide defaults for CONFIG_NR_CPUS.
+        CONFIG_NR_CPUS=8
+    fi
+
+    # Use the minimum of the number of processors in the system or
+    # CONFIG_NR_CPUS.
+    CPUS=$(nproc)
+    if [[ ${CPUS} -gt ${CONFIG_NR_CPUS} ]]; then
+        echo "${CONFIG_NR_CPUS}"
+    else
+        echo "${CPUS}"
+    fi
+}
+
 # Boot QEMU
 function setup_qemu_args() {
     # All arm32_* options share the same rootfs, under images/arm
@@ -178,6 +222,7 @@ function setup_qemu_args() {
                 QEMU_ARCH_ARGS+=(
                     -cpu "host,aarch64=off"
                     -enable-kvm
+                    -smp "${SMP:-$(get_default_smp_value)}"
                 )
                 QEMU=(qemu-system-aarch64)
             else
@@ -194,14 +239,23 @@ function setup_qemu_args() {
                 -machine "virt,gic-version=max"
             )
             if [[ "$(uname -m)" = "aarch64" && -e /dev/kvm ]] && ${KVM}; then
-                QEMU_ARCH_ARGS+=(-enable-kvm)
+                QEMU_ARCH_ARGS+=(
+                    -enable-kvm
+                    -smp "${SMP:-$(get_default_smp_value)}"
+                )
             else
                 QEMU_ARCH_ARGS+=(-machine "virtualization=true")
             fi
+            # Give the machine more cores and memory when booting Debian to
+            # improve performance
             if ${DEBIAN}; then
-                # Booting is so slow without these
                 QEMU_RAM=2G
-                QEMU_ARCH_ARGS+=(-smp "${SMP:-4}")
+                # Do not add '-smp' if it is present at this point, as that
+                # means that KVM is being used, which will already have a
+                # suitable number of cores
+                if ! echo "${QEMU_ARCH_ARGS[*]}" | grep -q smp; then
+                    QEMU_ARCH_ARGS+=(-smp "${SMP:-4}")
+                fi
             fi
             QEMU=(qemu-system-aarch64)
             ;;
@@ -297,7 +351,7 @@ function setup_qemu_args() {
                     -cpu host
                     -d "unimp,guest_errors"
                     -enable-kvm
-                    -smp "${SMP:-$(nproc)}"
+                    -smp "${SMP:-$(get_default_smp_value)}"
                 )
             else
                 [[ ${ARCH} = "x86_64" ]] && QEMU_ARCH_ARGS=(-cpu Nehalem)
