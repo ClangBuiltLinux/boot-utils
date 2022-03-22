@@ -81,6 +81,8 @@ for CONFIG in "${CONFIGS[@]}"; do
     # Copy new images
     # Make sure images exist before moving them
     IMAGES=("output/images/rootfs.cpio")
+    # For x86_64, we also build an ext4 image for UML
+    [[ ${ARCH} == "x86_64" ]] && IMAGES+=("output/images/rootfs.ext4")
     for IMAGE in "${IMAGES[@]}"; do
         [[ -f ${IMAGE} ]] || die "${IMAGE} could not be found! Did the build error?"
         zstd -f -19 "${IMAGE}" -o "${IMAGES_FOLDER}/${IMAGE##*/}.zst" || die "Compressing ${IMAGE##*/} failed!"
