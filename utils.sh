@@ -26,14 +26,15 @@ function die() {
 
 # Expands '-k' to an absolute path to a kernel image if necessary
 function get_full_kernel_path() {
-    # If '-k' is an path that ends in the kernel image, we can just use it directly
-    if [[ ${KERNEL_LOCATION##*/} = "${KIMAGE:=zImage}" ]]; then
+    # If '-k' is a file, we can just use it directly
+    if [[ -f ${KERNEL_LOCATION} ]]; then
         KERNEL=${KERNEL_LOCATION}
-    # If not though, we need to find it based on the kernel build directory
+    # If not, we need to find it based on the kernel build directory
     else
         # If the image is an uncompressed vmlinux or a UML image, it is in the
         # root of the build folder
         # Otherwise, it is in the architecture's boot directory
+        [[ -z ${KIMAGE} ]] && KIMAGE=zImage
         [[ ${KIMAGE} == "vmlinux" || ${KIMAGE} == "linux" ]] || BOOT_DIR=arch/${ARCH}/boot/
         KERNEL=${KERNEL_LOCATION}/${BOOT_DIR}${KIMAGE}
     fi
