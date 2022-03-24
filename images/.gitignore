@@ -1,2 +1,3 @@
 debian.img
 rootfs.cpio
+rootfs.ext4
