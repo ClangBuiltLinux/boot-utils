@@ -232,14 +232,20 @@ function setup_qemu_args() {
             KIMAGE=Image.gz
             QEMU=(qemu-system-aarch64)
             get_full_kernel_path
-            # https://gitlab.com/qemu-project/qemu/-/commit/69b2265d5fe8e0f401d75e175e0a243a7d505e53
-            if [[ $(get_lnx_ver_code gzip -c -d "${KERNEL}") -lt 512000 ]] &&
-                [[ $(get_qemu_ver_code) -ge 602050 ]]; then
-                LPA2=,lpa2=off
+            if [[ $(get_qemu_ver_code) -ge 602050 ]]; then
+                LNX_VER_CODE=$(get_lnx_ver_code gzip -c -d "${KERNEL}")
+                # https://gitlab.com/qemu-project/qemu/-/issues/964
+                if [[ ${LNX_VER_CODE} -lt 416000 ]]; then
+                    CPU=cortex-a72
+                # https://gitlab.com/qemu-project/qemu/-/commit/69b2265d5fe8e0f401d75e175e0a243a7d505e53
+                elif [[ ${LNX_VER_CODE} -lt 512000 ]]; then
+                    CPU=max,lpa2=off
+                fi
             fi
+            [[ -z ${CPU} ]] && CPU=max
             APPEND_STRING+="console=ttyAMA0 earlycon "
             QEMU_ARCH_ARGS=(
-                -cpu "max${LPA2}"
+                -cpu "${CPU}"
                 -machine "virt,gic-version=max"
             )
             if [[ "$(uname -m)" = "aarch64" && -e /dev/kvm ]] && ${KVM}; then
