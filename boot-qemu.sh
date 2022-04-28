@@ -232,17 +232,23 @@ function setup_qemu_args() {
             KIMAGE=Image.gz
             QEMU=(qemu-system-aarch64)
             get_full_kernel_path
-            if [[ $(get_qemu_ver_code) -ge 602050 ]]; then
+            QEMU_VER_CODE=$(get_qemu_ver_code)
+            if [[ ${QEMU_VER_CODE} -ge 602050 ]]; then
                 LNX_VER_CODE=$(get_lnx_ver_code gzip -c -d "${KERNEL}")
                 # https://gitlab.com/qemu-project/qemu/-/issues/964
                 if [[ ${LNX_VER_CODE} -lt 416000 ]]; then
                     CPU=cortex-a72
-                # https://gitlab.com/qemu-project/qemu/-/commit/69b2265d5fe8e0f401d75e175e0a243a7d505e53
+                # lpa2=off: https://gitlab.com/qemu-project/qemu/-/commit/69b2265d5fe8e0f401d75e175e0a243a7d505e53
+                # pauth-impdef=true: https://lore.kernel.org/YlgVa+AP0g4IYvzN@lakrids/
                 elif [[ ${LNX_VER_CODE} -lt 512000 ]]; then
-                    CPU=max,lpa2=off
+                    CPU=max,lpa2=off,pauth-impdef=true
                 fi
             fi
-            [[ -z ${CPU} ]] && CPU=max
+            if [[ -z ${CPU} ]]; then
+                CPU=max
+                # https://lore.kernel.org/YlgVa+AP0g4IYvzN@lakrids/
+                [[ ${QEMU_VER_CODE} -ge 600000 ]] && CPU=${CPU},pauth-impdef=true
+            fi
             APPEND_STRING+="console=ttyAMA0 earlycon "
             QEMU_ARCH_ARGS=(
                 -cpu "${CPU}"
