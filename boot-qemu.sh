@@ -231,36 +231,37 @@ function setup_qemu_args() {
             ARCH=arm64
             KIMAGE=Image.gz
             QEMU=(qemu-system-aarch64)
-            get_full_kernel_path
-            QEMU_VER_CODE=$(get_qemu_ver_code)
-            if [[ ${QEMU_VER_CODE} -ge 602050 ]]; then
-                LNX_VER_CODE=$(get_lnx_ver_code gzip -c -d "${KERNEL}")
-                # https://gitlab.com/qemu-project/qemu/-/issues/964
-                if [[ ${LNX_VER_CODE} -lt 416000 ]]; then
-                    CPU=cortex-a72
-                # lpa2=off: https://gitlab.com/qemu-project/qemu/-/commit/69b2265d5fe8e0f401d75e175e0a243a7d505e53
-                # pauth-impdef=true: https://lore.kernel.org/YlgVa+AP0g4IYvzN@lakrids/
-                elif [[ ${LNX_VER_CODE} -lt 512000 ]]; then
-                    CPU=max,lpa2=off,pauth-impdef=true
-                fi
-            fi
-            if [[ -z ${CPU} ]]; then
-                CPU=max
-                # https://lore.kernel.org/YlgVa+AP0g4IYvzN@lakrids/
-                [[ ${QEMU_VER_CODE} -ge 600000 ]] && CPU=${CPU},pauth-impdef=true
-            fi
             APPEND_STRING+="console=ttyAMA0 earlycon "
-            QEMU_ARCH_ARGS=(
-                -cpu "${CPU}"
-                -machine "virt,gic-version=max"
-            )
+            QEMU_ARCH_ARGS=(-machine "virt,gic-version=max")
             if [[ "$(uname -m)" = "aarch64" && -e /dev/kvm ]] && ${KVM}; then
                 QEMU_ARCH_ARGS+=(
+                    -cpu host
                     -enable-kvm
                     -smp "${SMP:-$(get_default_smp_value)}"
                 )
             else
-                QEMU_ARCH_ARGS+=(-machine "virtualization=true")
+                get_full_kernel_path
+                QEMU_VER_CODE=$(get_qemu_ver_code)
+                if [[ ${QEMU_VER_CODE} -ge 602050 ]]; then
+                    LNX_VER_CODE=$(get_lnx_ver_code gzip -c -d "${KERNEL}")
+                    # https://gitlab.com/qemu-project/qemu/-/issues/964
+                    if [[ ${LNX_VER_CODE} -lt 416000 ]]; then
+                        CPU=cortex-a72
+                    # lpa2=off: https://gitlab.com/qemu-project/qemu/-/commit/69b2265d5fe8e0f401d75e175e0a243a7d505e53
+                    # pauth-impdef=true: https://lore.kernel.org/YlgVa+AP0g4IYvzN@lakrids/
+                    elif [[ ${LNX_VER_CODE} -lt 512000 ]]; then
+                        CPU=max,lpa2=off,pauth-impdef=true
+                    fi
+                fi
+                if [[ -z ${CPU} ]]; then
+                    CPU=max
+                    # https://lore.kernel.org/YlgVa+AP0g4IYvzN@lakrids/
+                    [[ ${QEMU_VER_CODE} -ge 600000 ]] && CPU=${CPU},pauth-impdef=true
+                fi
+                QEMU_ARCH_ARGS+=(
+                    -cpu "${CPU}"
+                    -machine "virtualization=true"
+                )
             fi
             # Give the machine more cores and memory when booting Debian to
             # improve performance
