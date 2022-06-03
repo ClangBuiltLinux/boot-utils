@@ -30,10 +30,7 @@ function decomp_rootfs() {
 }
 
 function execute_kernel() {
-    # exec is needed to avoid a "Killed" message when the kernel shuts down:
-    # https://github.com/ClangBuiltLinux/boot-utils/issues/60
-    # Nothing runs after this command so it is okay for it to replace this process.
-    exec "$KERNEL" ubd0="$rootfs" "${kernel_args[@]}"
+    "$KERNEL" ubd0="$rootfs" "${kernel_args[@]}"
 }
 
 parse_parameters "$@"
