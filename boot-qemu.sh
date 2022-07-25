@@ -186,7 +186,6 @@ function setup_qemu_args() {
             DTB=aspeed-bmc-opp-palmetto.dtb
             QEMU_ARCH_ARGS=(
                 -machine palmetto-bmc
-                -no-reboot
             )
             QEMU=(qemu-system-arm)
             ;;
@@ -196,7 +195,6 @@ function setup_qemu_args() {
             DTB=aspeed-bmc-opp-romulus.dtb
             QEMU_ARCH_ARGS=(
                 -machine romulus-bmc
-                -no-reboot
             )
             QEMU=(qemu-system-arm)
             ;;
@@ -209,7 +207,6 @@ function setup_qemu_args() {
             ${DEBIAN} && HIGHMEM=,highmem=off
             QEMU_ARCH_ARGS=(
                 -machine "virt${HIGHMEM}"
-                -no-reboot
             )
             # It is possible to boot ARMv7 kernels under KVM on AArch64 hosts,
             # if it is supported. ARMv7 KVM support was ripped out of the
@@ -282,7 +279,6 @@ function setup_qemu_args() {
             QEMU_ARCH_ARGS=(
                 -cpu m68040
                 -M q800
-                -no-reboot
             )
             QEMU=(qemu-system-m68k)
             ;;
@@ -310,7 +306,6 @@ function setup_qemu_args() {
             esac
             ARCH=powerpc
             APPEND_STRING+="console=ttyS0 "
-            QEMU_ARCH_ARGS+=(-no-reboot)
             QEMU_RAM=128m
             QEMU=(qemu-system-ppc)
             ;;
@@ -451,6 +446,7 @@ function invoke_qemu() {
     set -x
     "${QEMU[@]}" \
         "${QEMU_ARCH_ARGS[@]}" \
+        -no-reboot \
         -display none \
         -kernel "${KERNEL}" \
         -m "${QEMU_RAM}" \
