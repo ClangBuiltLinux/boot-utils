@@ -30,6 +30,9 @@ Required parameters:
     is being run.
 
 Optional parameters:
+  --append:
+    Adds additional kernel boot params to the kernel command line.
+
   -d | --debug:
     Invokes 'set -x' for debugging the script.
 
