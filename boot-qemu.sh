@@ -2,6 +2,7 @@
 
 # Root of the repo
 BASE=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)
+APPEND_STRING=""
 
 source "${BASE}"/utils.sh
 
@@ -20,6 +21,10 @@ function parse_parameters() {
                     arm | arm32_v5 | arm32_v6 | arm32_v7 | arm64 | arm64be | m68k | mips | mipsel | ppc32 | ppc32_mac | ppc64 | ppc64le | riscv | s390 | x86 | x86_64) ARCH=${1} ;;
                     *) die "Invalid --arch value '${1}'" ;;
                 esac
+                ;;
+
+            --append)
+                shift && APPEND_STRING="${1} "
                 ;;
 
             -d | --debug)
@@ -167,7 +172,6 @@ function setup_qemu_args() {
         ROOTFS=${IMAGES_DIR}/rootfs.cpio
     fi
 
-    APPEND_STRING=""
     if ${INTERACTIVE}; then
         if ${DEBIAN}; then
             APPEND_STRING+="root=/dev/vda "
