@@ -699,7 +699,7 @@ def launch_qemu(cfg):
 
             answer = input("Re-run QEMU + gdb? [y/n] ")
             if answer.lower() == "n":
-                exit(0)
+                break
     else:
         qemu_cmd += ["-serial", "mon:stdio"]
 
