@@ -87,7 +87,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def can_use_kvm(args):
+def can_use_kvm(can_test_for_kvm, guest_arch):
     """
     Checks that KVM can be used for faster VMs based on:
         * User's request
@@ -102,13 +102,13 @@ def can_use_kvm(args):
               '/proc/cpuinfo'
 
     Parameters:
-        args (Namespace): The Namespace object returned from parse_arguments()
+        user_kvm_opt_out (bool): False if user passed in '--no-kvm', True if not
+        guest_arch (str): The guest architecture being run.
 
     Returns:
         True if KVM can be used based on the above parameters, False if not.
     """
-    # We can only test for KVM if the user did not opt out of it
-    if not args.no_kvm:
+    if can_test_for_kvm:
         # /dev/kvm must exist to use KVM with QEMU
         if Path("/dev/kvm").exists():
             guest_arch = args.architecture
@@ -240,7 +240,7 @@ def setup_cfg(args):
         "smp_requested": args.smp is not None,
         "smp_value": get_smp_value(args),
         "timeout": args.timeout,
-        "use_kvm": can_use_kvm(args),
+        "use_kvm": can_use_kvm(not args.no_kvm, args.architecture),
     }
 
 
