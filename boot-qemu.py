@@ -244,9 +244,9 @@ def setup_cfg(args):
     }
 
 
-def print_version_code(version):
+def create_version_code(version):
     """
-    Prints a version list with three values (major, minor, and patch level) as
+    Turns a version list with three values (major, minor, and patch level) into
     an integer with at least six digits:
         * major: as is
         * minor: with a minimum length of two ("1" becomes "01")
@@ -297,7 +297,7 @@ def get_qemu_ver_code(qemu):
     # "QEMU emulator version x.y.z (...)" -> x.y.z -> ['x', 'y', 'z']
     qemu_version = qemu_version_string.split(" ")[3].split(".")
 
-    return print_version_code(qemu_version)
+    return create_version_code(qemu_version)
 
 
 def get_linux_ver_code(decomp_cmd):
@@ -335,7 +335,7 @@ def get_linux_ver_code(decomp_cmd):
         utils.die("Linux version string could not be found in '{}'".format(
             kernel_path))
 
-    return print_version_code(linux_version)
+    return create_version_code(linux_version)
 
 
 def get_and_decomp_rootfs(cfg):
