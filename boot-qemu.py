@@ -108,8 +108,7 @@ def can_use_kvm(args):
         True if KVM can be used based on the above parameters, False if not.
     """
     # We can only test for KVM if the user did not opt out of it
-    can_test_for_kvm = not args.no_kvm
-    if can_test_for_kvm:
+    if not args.no_kvm:
         # /dev/kvm must exist to use KVM with QEMU
         if Path("/dev/kvm").exists():
             guest_arch = args.architecture
