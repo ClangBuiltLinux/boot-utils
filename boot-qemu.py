@@ -708,8 +708,8 @@ def launch_qemu(cfg):
             stdbuf_cmd = ["stdbuf", "-oL", "-eL"]
             qemu_cmd = timeout_cmd + stdbuf_cmd + qemu_cmd
 
+        pretty_print_qemu_cmd(qemu_cmd)
         try:
-            pretty_print_qemu_cmd(qemu_cmd)
             subprocess.run(qemu_cmd, check=True)
         except subprocess.CalledProcessError as ex:
             if ex.returncode == 124:
