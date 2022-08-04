@@ -54,7 +54,7 @@ def decomp_rootfs():
     subprocess.run(["zstd", "-q", "-d", "{}.zst".format(rootfs), "-o", rootfs],
                    check=True)
 
-    return rootfsi
+    return rootfs
 
 
 def run_kernel(kernel, rootfs, interactive):
