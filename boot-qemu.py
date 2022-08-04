@@ -4,6 +4,7 @@ import argparse
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 
@@ -326,7 +327,7 @@ def get_linux_ver_code(decomp_cmd):
 
     linux_version = None
     for line in strings.stdout.decode("UTF-8").split("\n"):
-        if "Linux version" in line:
+        if re.search(r"Linux version \d\.\d+\.\d+", line):
             # "Linux version x.y.z-<localversion> ..." -> "x.y.z-<localversion>" -> "x.y.z" -> ['x', 'y', 'z']
             linux_version = line.split(" ")[2].split("-")[0].split(".")
             break
