@@ -507,8 +507,6 @@ def get_qemu_args(cfg):
         qemu = "qemu-system-ppc64"
         qemu_args += ["-device", "ipmi-bmc-sim,id=bmc0"]
         qemu_args += ["-device", "isa-ipmi-bt,bmc=bmc0,irq=10"]
-        qemu_args += ["-L", base_folder.joinpath("images", arch).as_posix()]
-        qemu_args += ["-bios", "skiboot.lid"]
         qemu_args += ["-machine", "powernv8"]
         ram = "2G"
 
