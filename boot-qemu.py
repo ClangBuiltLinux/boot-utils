@@ -645,7 +645,7 @@ def pretty_print_qemu_cmd(qemu_cmd):
             qemu_cmd_pretty += " {}".format(element.split("/")[-1])
         else:
             qemu_cmd_pretty += " {}".format(element)
-    print("$ {}".format(qemu_cmd_pretty.strip()))
+    print("$ {}".format(qemu_cmd_pretty.strip()), flush=True)
 
 
 def launch_qemu(cfg):

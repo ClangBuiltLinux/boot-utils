@@ -73,7 +73,7 @@ def green(string):
     Parameters:
         string (str): String to print in bold green.
     """
-    print("\n\033[01;32m{}\033[0m".format(string))
+    print("\n\033[01;32m{}\033[0m".format(string), flush=True)
 
 
 def red(string):
@@ -83,4 +83,4 @@ def red(string):
     Parameters:
         string (str): String to print in bold red.
     """
-    print("\n\033[01;31m{}\033[0m".format(string))
+    print("\n\033[01;31m{}\033[0m".format(string), flush=True)
