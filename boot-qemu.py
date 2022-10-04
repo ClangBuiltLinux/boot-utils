@@ -328,8 +328,7 @@ def get_linux_ver_code(decomp_cmd):
     linux_version = None
     for line in strings.stdout.decode("UTF-8").split("\n"):
         if re.search(r"Linux version \d+\.\d+\.\d+", line):
-            # "Linux version x.y.z-<localversion> ..." -> "x.y.z-<localversion>" -> "x.y.z" -> ['x', 'y', 'z']
-            linux_version = line.split(" ")[2].split("-")[0].split(".")
+            linux_version = re.search(r"\d+\.\d+\.\d+", line)[0].split(".")
             break
     if not linux_version:
         kernel_path = decomp_cmd[-1]
