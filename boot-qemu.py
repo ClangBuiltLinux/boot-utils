@@ -195,7 +195,7 @@ def get_smp_value(args):
 
     # Use the minimum of the number of usable processors for the script or
     # CONFIG_NR_CPUS.
-    usable_cpus = len(os.sched_getaffinity(0))
+    usable_cpus = os.cpu_count()
     return min(usable_cpus, config_nr_cpus)
 
 
