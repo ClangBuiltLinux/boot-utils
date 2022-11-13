@@ -326,7 +326,7 @@ def get_linux_ver_code(decomp_cmd):
                              input=decomp.stdout)
 
     linux_version = None
-    for line in strings.stdout.decode("UTF-8").split("\n"):
+    for line in strings.stdout.decode("UTF-8", "ignore").split("\n"):
         if re.search(r"Linux version \d+\.\d+\.\d+", line):
             linux_version = re.search(r"\d+\.\d+\.\d+", line)[0].split(".")
             break
