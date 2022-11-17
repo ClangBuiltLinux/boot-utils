@@ -67,7 +67,7 @@ def run_kernel(kernel, rootfs, interactive):
         * rootfs (Path): rootfs Path object containing full path to rootfs.
         * interactive (bool): Whether or not to run UML interactively.
     """
-    uml_cmd = [kernel.as_posix(), f"ubd0={rootfs.as_posix()}"]
+    uml_cmd = [kernel, f"ubd0={rootfs}"]
     if interactive:
         uml_cmd += ["init=/bin/sh"]
     print(f"$ {' '.join([str(element) for element in uml_cmd])}")
