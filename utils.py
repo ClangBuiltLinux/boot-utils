@@ -13,8 +13,8 @@ def check_cmd(cmd):
         cmd (str): External command name or path.
     """
     if not shutil.which(cmd):
-        die("The external command '{}' is needed but it could not be found in PATH, please install it!"
-            .format(cmd))
+        die(f"The external command '{cmd}' is needed but it could not be found in PATH, please install it!"
+            )
 
 
 def die(string):
@@ -25,7 +25,7 @@ def die(string):
         string (str): String to print in red; prefixed with "ERROR: "
                       automatically.
     """
-    red("ERROR: {}".format(string))
+    red(f"ERROR: {string}")
     exit(1)
 
 
@@ -56,12 +56,12 @@ def get_full_kernel_path(kernel_location, image, arch=None):
         # Otherwise, it is in the architecture's boot directory
         else:
             if not arch:
-                die("Kernel image ('{}') is in the arch/ directory but 'arch' was not provided!"
-                    .format(image))
+                die(f"Kernel image ('{image}') is in the arch/ directory but 'arch' was not provided!"
+                    )
             kernel = kernel_location.joinpath("arch", arch, "boot", image)
 
     if not kernel.exists():
-        die("Kernel ('{}') does not exist!".format(kernel))
+        die(f"Kernel ('{kernel}') does not exist!")
 
     return kernel
 
@@ -73,7 +73,7 @@ def green(string):
     Parameters:
         string (str): String to print in bold green.
     """
-    print("\n\033[01;32m{}\033[0m".format(string), flush=True)
+    print(f"\n\033[01;32m{string}\033[0m", flush=True)
 
 
 def red(string):
@@ -83,4 +83,4 @@ def red(string):
     Parameters:
         string (str): String to print in bold red.
     """
-    print("\n\033[01;31m{}\033[0m".format(string), flush=True)
+    print(f"\n\033[01;31m{string}\033[0m", flush=True)

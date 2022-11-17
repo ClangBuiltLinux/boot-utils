@@ -261,7 +261,7 @@ def create_version_code(version):
         An integer with at least six digits.
     """
     major, minor, patch = [int(version[i]) for i in (0, 1, 2)]
-    return int("{:d}{:02d}{:03d}".format(major, minor, patch))
+    return int(f"{major:d}{minor:02d}{patch:03d}")
 
 
 def get_qemu_ver_string(qemu):
@@ -332,8 +332,8 @@ def get_linux_ver_code(decomp_cmd):
             break
     if not linux_version:
         kernel_path = decomp_cmd[-1]
-        utils.die("Linux version string could not be found in '{}'".format(
-            kernel_path))
+        utils.die(
+            f"Linux version string could not be found in '{kernel_path}'")
 
     return create_version_code(linux_version)
 
@@ -369,7 +369,7 @@ def get_and_decomp_rootfs(cfg):
     rootfs = rootfs.as_posix()
 
     utils.check_cmd("zstd")
-    subprocess.run(["zstd", "-q", "-d", "{}.zst".format(rootfs), "-o", rootfs],
+    subprocess.run(["zstd", "-q", "-d", f"{rootfs}.zst", "-o", rootfs],
                    check=True)
 
     return rootfs
@@ -474,7 +474,7 @@ def get_qemu_args(cfg):
     elif arch == "mips" or arch == "mipsel":
         kernel_arch = "mips"
         kernel_image = "vmlinux"
-        qemu = "qemu-system-{}".format(arch)
+        qemu = f"qemu-system-{arch}"
         qemu_args += ["-cpu", "24Kf"]
         qemu_args += ["-machine", "malta"]
 
@@ -567,8 +567,8 @@ def get_qemu_args(cfg):
         dtb = kernel.parent.joinpath(dtb_dir, dtb)
         if not dtb.exists():
             utils.die(
-                "'{}' is required for booting but it could not be found at '{}'"
-                .format(dtb.stem.as_posix(), dtb.as_posix()))
+                f"'{dtb.stem.as_posix()}' is required for booting but it could not be found at '{dtb.as_posix()}'"
+            )
 
         qemu_args += ["-dtb", dtb.as_posix()]
 
@@ -618,8 +618,8 @@ def pretty_print_qemu_info(qemu):
     qemu_dir = Path(qemu).parent.as_posix()
     qemu_version_string = get_qemu_ver_string(qemu)
 
-    utils.green("QEMU location: \033[0m{}".format(qemu_dir))
-    utils.green("QEMU version: \033[0m{}\n".format(qemu_version_string))
+    utils.green(f"QEMU location: \033[0m{qemu_dir}")
+    utils.green(f"QEMU version: \033[0m{qemu_version_string}\n")
 
 
 def pretty_print_qemu_cmd(qemu_cmd):
@@ -639,12 +639,12 @@ def pretty_print_qemu_cmd(qemu_cmd):
     qemu_cmd_pretty = ""
     for element in qemu_cmd:
         if " " in element:
-            qemu_cmd_pretty += ' "{}"'.format(element)
+            qemu_cmd_pretty += f' "{element}"'
         elif "qemu-system-" in element:
-            qemu_cmd_pretty += " {}".format(element.split("/")[-1])
+            qemu_cmd_pretty += f' {element.split("/")[-1]}'
         else:
-            qemu_cmd_pretty += " {}".format(element)
-    print("$ {}".format(qemu_cmd_pretty.strip()), flush=True)
+            qemu_cmd_pretty += f" {element}"
+    print(f"$ {qemu_cmd_pretty.strip()}", flush=True)
 
 
 def launch_qemu(cfg):
