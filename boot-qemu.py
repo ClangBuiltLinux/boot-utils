@@ -123,8 +123,7 @@ def can_use_kvm(can_test_for_kvm, guest_arch):
                 if guest_arch == "arm" or guest_arch == "arm32_v7":
                     check_32_bit_el1_exec = base_folder.joinpath(
                         "utils", "aarch64_32_bit_el1_supported")
-                    check_32_bit_el1 = subprocess.run(
-                        [check_32_bit_el1_exec.as_posix()])
+                    check_32_bit_el1 = subprocess.run([check_32_bit_el1_exec])
                     return check_32_bit_el1.returncode == 0
 
             if host_arch == "x86_64" and "x86" in guest_arch:
@@ -180,7 +179,7 @@ def get_smp_value(args):
     for config_name in [".config", "../../../.config", "config"]:
         config_path = kernel_dir.joinpath(config_name)
         if config_path.is_file():
-            config_file = config_path.as_posix()
+            config_file = config_path
             break
 
     # Choose a sensible default value based on treewide defaults for
@@ -231,7 +230,7 @@ def setup_cfg(args):
     return {
         # Required
         "architecture": args.architecture,
-        "kernel_location": Path(args.kernel_location).resolve().as_posix(),
+        "kernel_location": Path(args.kernel_location).resolve(),
 
         # Optional
         "append": args.append,
@@ -261,7 +260,7 @@ def create_version_code(version):
         An integer with at least six digits.
     """
     major, minor, patch = [int(version[i]) for i in (0, 1, 2)]
-    return int("{:d}{:02d}{:03d}".format(major, minor, patch))
+    return int(f"{major:d}{minor:02d}{patch:03d}")
 
 
 def get_qemu_ver_string(qemu):
@@ -332,8 +331,8 @@ def get_linux_ver_code(decomp_cmd):
             break
     if not linux_version:
         kernel_path = decomp_cmd[-1]
-        utils.die("Linux version string could not be found in '{}'".format(
-            kernel_path))
+        utils.die(
+            f"Linux version string could not be found in '{kernel_path}'")
 
     return create_version_code(linux_version)
 
@@ -365,11 +364,8 @@ def get_and_decomp_rootfs(cfg):
     if rootfs.exists():
         rootfs.unlink()
 
-    # Print as string for remainder due to use in subprocess command lists
-    rootfs = rootfs.as_posix()
-
     utils.check_cmd("zstd")
-    subprocess.run(["zstd", "-q", "-d", "{}.zst".format(rootfs), "-o", rootfs],
+    subprocess.run(["zstd", "-q", "-d", f"{rootfs}.zst", "-o", rootfs],
                    check=True)
 
     return rootfs
@@ -447,7 +443,7 @@ def get_qemu_args(cfg):
             qemu_ver_code = get_qemu_ver_code(qemu)
 
             if qemu_ver_code >= 602050:
-                gzip_kernel_cmd = ["gzip", "-c", "-d", kernel.as_posix()]
+                gzip_kernel_cmd = ["gzip", "-c", "-d", kernel]
                 linux_ver_code = get_linux_ver_code(gzip_kernel_cmd)
 
                 # https://gitlab.com/qemu-project/qemu/-/issues/964
@@ -474,7 +470,7 @@ def get_qemu_args(cfg):
     elif arch == "mips" or arch == "mipsel":
         kernel_arch = "mips"
         kernel_image = "vmlinux"
-        qemu = "qemu-system-{}".format(arch)
+        qemu = f"qemu-system-{arch}"
         qemu_args += ["-cpu", "24Kf"]
         qemu_args += ["-machine", "malta"]
 
@@ -519,7 +515,7 @@ def get_qemu_args(cfg):
         if "BIOS" in os.environ:
             bios = os.environ["BIOS"]
         elif deb_bios.exists():
-            bios = deb_bios.as_posix()
+            bios = deb_bios
 
         qemu = "qemu-system-riscv64"
         qemu_args += ["-bios", bios]
@@ -552,12 +548,12 @@ def get_qemu_args(cfg):
     if not kernel:
         kernel = utils.get_full_kernel_path(kernel_location, kernel_image,
                                             kernel_arch)
-    qemu_args += ["-kernel", kernel.as_posix()]
+    qemu_args += ["-kernel", kernel]
 
     # '-dtb'
     if dtb:
         # If we are in a boot folder, look for them in the dts folder in it
-        if "boot" in kernel.as_posix():
+        if "boot" in str(kernel):
             dtb_dir = "dts"
         # Otherwise, assume there is a dtbs folder in the same folder as the
         # kernel image (tuxmake)
@@ -567,10 +563,10 @@ def get_qemu_args(cfg):
         dtb = kernel.parent.joinpath(dtb_dir, dtb)
         if not dtb.exists():
             utils.die(
-                "'{}' is required for booting but it could not be found at '{}'"
-                .format(dtb.stem.as_posix(), dtb.as_posix()))
+                f"'{dtb.stem}' is required for booting but it could not be found at '{dtb}'"
+            )
 
-        qemu_args += ["-dtb", dtb.as_posix()]
+        qemu_args += ["-dtb", dtb]
 
     # '-append'
     if gdb:
@@ -615,11 +611,11 @@ def pretty_print_qemu_info(qemu):
     Parameters:
         qemu (str): A string containing the full path to the QEMU executable.
     """
-    qemu_dir = Path(qemu).parent.as_posix()
+    qemu_dir = Path(qemu).parent
     qemu_version_string = get_qemu_ver_string(qemu)
 
-    utils.green("QEMU location: \033[0m{}".format(qemu_dir))
-    utils.green("QEMU version: \033[0m{}\n".format(qemu_version_string))
+    utils.green(f"QEMU location: \033[0m{qemu_dir}")
+    utils.green(f"QEMU version: \033[0m{qemu_version_string}\n")
 
 
 def pretty_print_qemu_cmd(qemu_cmd):
@@ -638,13 +634,13 @@ def pretty_print_qemu_cmd(qemu_cmd):
     """
     qemu_cmd_pretty = ""
     for element in qemu_cmd:
-        if " " in element:
-            qemu_cmd_pretty += ' "{}"'.format(element)
-        elif "qemu-system-" in element:
-            qemu_cmd_pretty += " {}".format(element.split("/")[-1])
+        if " " in str(element):
+            qemu_cmd_pretty += f' "{element}"'
+        elif "qemu-system-" in str(element):
+            qemu_cmd_pretty += f' {element.split("/")[-1]}'
         else:
-            qemu_cmd_pretty += " {}".format(element)
-    print("$ {}".format(qemu_cmd_pretty.strip()), flush=True)
+            qemu_cmd_pretty += f" {element}"
+    print(f"$ {qemu_cmd_pretty.strip()}", flush=True)
 
 
 def launch_qemu(cfg):
@@ -687,7 +683,7 @@ def launch_qemu(cfg):
             utils.green("Starting GDB...")
             utils.check_cmd(gdb_bin)
             gdb_cmd = [gdb_bin]
-            gdb_cmd += [Path(kernel_location).joinpath("vmlinux").as_posix()]
+            gdb_cmd += [kernel_location.joinpath("vmlinux")]
             gdb_cmd += ["-ex", "target remote :1234"]
             subprocess.run(gdb_cmd)
 

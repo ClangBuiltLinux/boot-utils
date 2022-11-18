@@ -51,7 +51,7 @@ def decomp_rootfs():
         rootfs.unlink()
 
     utils.check_cmd("zstd")
-    subprocess.run(["zstd", "-q", "-d", "{}.zst".format(rootfs), "-o", rootfs],
+    subprocess.run(["zstd", "-q", "-d", f"{rootfs}.zst", "-o", rootfs],
                    check=True)
 
     return rootfs
@@ -67,10 +67,10 @@ def run_kernel(kernel, rootfs, interactive):
         * rootfs (Path): rootfs Path object containing full path to rootfs.
         * interactive (bool): Whether or not to run UML interactively.
     """
-    uml_cmd = [kernel.as_posix(), "ubd0={}".format(rootfs.as_posix())]
+    uml_cmd = [kernel, f"ubd0={rootfs}"]
     if interactive:
         uml_cmd += ["init=/bin/sh"]
-    print("$ {}".format(" ".join([str(element) for element in uml_cmd])))
+    print(f"$ {' '.join([str(element) for element in uml_cmd])}")
     subprocess.run(uml_cmd, check=True)
 
 
