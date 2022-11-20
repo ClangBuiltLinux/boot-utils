@@ -434,7 +434,7 @@ def get_qemu_args(cfg):
         kernel_arch = "arm64"
         kernel_image = "Image.gz"
         qemu = "qemu-system-aarch64"
-        qemu_args += ["-machine", "virt,gic-version=max"]
+        machine = "virt,gic-version=max"
 
         if not use_kvm:
             cpu = "max"
@@ -458,7 +458,11 @@ def get_qemu_args(cfg):
                 cpu += ",pauth-impdef=true"
 
             qemu_args += ["-cpu", cpu]
-            qemu_args += ["-machine", "virtualization=true"]
+            # Boot with VHE emulation, which allows the kernel to run at EL2.
+            # KVM does not emulate VHE, so this cannot be unconditional.
+            machine += ",virtualization=true"
+
+        qemu_args += ["-machine", machine]
 
     elif arch == "m68k":
         append += " console=ttyS0,115200"
