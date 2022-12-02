@@ -244,25 +244,6 @@ def setup_cfg(args):
     }
 
 
-def create_version_code(version):
-    """
-    Turns a version list with three values (major, minor, and patch level) into
-    an integer with at least six digits:
-        * major: as is
-        * minor: with a minimum length of two ("1" becomes "01")
-        * patch level: with a minimum length of three ("1" becomes "001")
-
-    Parameters:
-        version (list): A list with three integer values (major, minor, and
-                        patch level).
-
-    Returns:
-        An integer with at least six digits.
-    """
-    major, minor, patch = [int(version[i]) for i in (0, 1, 2)]
-    return int(f"{major:d}{minor:02d}{patch:03d}")
-
-
 def get_qemu_ver_string(qemu):
     """
     Prints the first line of QEMU's version output.
@@ -281,7 +262,7 @@ def get_qemu_ver_string(qemu):
     return qemu_version_call.stdout.decode("UTF-8").split("\n")[0]
 
 
-def get_qemu_ver_code(qemu):
+def get_qemu_ver_tuple(qemu):
     """
     Prints QEMU's version as an integer with at least six digits.
 
@@ -297,10 +278,10 @@ def get_qemu_ver_code(qemu):
     # "QEMU emulator version x.y.z (...)" -> x.y.z -> ['x', 'y', 'z']
     qemu_version = qemu_version_string.split(" ")[3].split(".")
 
-    return create_version_code(qemu_version)
+    return tuple(int(x) for x in qemu_version)
 
 
-def get_linux_ver_code(decomp_cmd):
+def get_linux_ver_tuple(decomp_cmd):
     """
     Searches the Linux kernel binary for the version string using 'strings'
     then prints it as an integer with at least six digits.
@@ -334,7 +315,7 @@ def get_linux_ver_code(decomp_cmd):
         utils.die(
             f"Linux version string could not be found in '{kernel_path}'")
 
-    return create_version_code(linux_version)
+    return tuple(int(x) for x in linux_version)
 
 
 def get_and_decomp_rootfs(cfg):
@@ -440,21 +421,21 @@ def get_qemu_args(cfg):
             cpu = "max"
             kernel = utils.get_full_kernel_path(kernel_location, kernel_image,
                                                 kernel_arch)
-            qemu_ver_code = get_qemu_ver_code(qemu)
+            qemu_ver = get_qemu_ver_tuple(qemu)
 
-            if qemu_ver_code >= 602050:
+            if qemu_ver >= (6, 2, 50):
                 gzip_kernel_cmd = ["gzip", "-c", "-d", kernel]
-                linux_ver_code = get_linux_ver_code(gzip_kernel_cmd)
+                linux_ver = get_linux_ver_tuple(gzip_kernel_cmd)
 
                 # https://gitlab.com/qemu-project/qemu/-/issues/964
-                if linux_ver_code < 416000:
+                if linux_ver < (4, 16, 0):
                     cpu = "cortex-a72"
                 # https://gitlab.com/qemu-project/qemu/-/commit/69b2265d5fe8e0f401d75e175e0a243a7d505e53
-                elif linux_ver_code < 512000:
+                elif linux_ver < (5, 12, 0):
                     cpu += ",lpa2=off"
 
             # https://lore.kernel.org/YlgVa+AP0g4IYvzN@lakrids/
-            if "max" in cpu and qemu_ver_code >= 600000:
+            if "max" in cpu and qemu_ver >= (6, 0, 0):
                 cpu += ",pauth-impdef=true"
 
             qemu_args += ["-cpu", cpu]
