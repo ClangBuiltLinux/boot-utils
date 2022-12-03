@@ -121,7 +121,7 @@ def can_use_kvm(can_test_for_kvm, guest_arch):
                 if "arm64" in guest_arch:
                     return True
                 # 32-bit EL1 is not always supported, test for it first
-                if guest_arch == "arm" or guest_arch == "arm32_v7":
+                if guest_arch in ("arm", "arm32_v7"):
                     check_32_bit_el1_exec = base_folder.joinpath(
                         "utils", "aarch64_32_bit_el1_supported")
                     check_32_bit_el1 = subprocess.run([check_32_bit_el1_exec])
@@ -401,7 +401,7 @@ def get_qemu_args(cfg):
         qemu = "qemu-system-arm"
         qemu_args += ["-machine", "romulus-bmc"]
 
-    elif arch == "arm" or arch == "arm32_v7":
+    elif arch in ("arm", "arm32_v7"):
         append += " console=ttyAMA0 earlycon"
         kernel_arch = "arm"
         qemu_args += ["-machine", "virt"]
@@ -411,7 +411,7 @@ def get_qemu_args(cfg):
         else:
             qemu = "qemu-system-arm"
 
-    elif arch == "arm64" or arch == "arm64be":
+    elif arch in ("arm64", "arm64be"):
         append += " console=ttyAMA0 earlycon"
         kernel_arch = "arm64"
         kernel_image = "Image.gz"
@@ -453,7 +453,7 @@ def get_qemu_args(cfg):
         qemu_args += ["-cpu", "m68040"]
         qemu_args += ["-M", "q800"]
 
-    elif arch == "mips" or arch == "mipsel":
+    elif arch in ("mips", "mipsel"):
         kernel_arch = "mips"
         kernel_image = "vmlinux"
         qemu = f"qemu-system-{arch}"
