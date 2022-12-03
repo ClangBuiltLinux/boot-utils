@@ -54,7 +54,7 @@ def parse_arguments():
         "--interactive",
         "--shell",
         action="store_true",
-        help=
+        help=  # noqa: E251
         "Instead of immediately shutting down the machine upon successful boot, pass 'rdinit=/bin/sh' on the kernel command line to allow interacting with the machine via a shell."
     )
     parser.add_argument(
@@ -62,20 +62,20 @@ def parse_arguments():
         "--kernel-location",
         required=True,
         type=str,
-        help=
+        help=  # noqa: E251
         "Path to kernel image or kernel build folder to search for image in. Can be an absolute or relative path."
     )
     parser.add_argument(
         "--no-kvm",
         action="store_true",
-        help=
+        help=  # noqa: E251
         "Do not use KVM for acceleration even when supported (only recommended for debugging)."
     )
     parser.add_argument(
         "-s",
         "--smp",
         type=int,
-        help=
+        help=  # noqa: E251
         "Number of processors for virtual machine. By default, only machines spawned with KVM will use multiple vCPUS."
     )
     parser.add_argument(
