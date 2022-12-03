@@ -40,6 +40,9 @@ def parse_arguments():
         default="",
         type=str,
         help="A string of values to pass to the kernel command line.")
+    parser.add_argument("--efi",
+                        action="store_true",
+                        help="Boot kernel using UEFI (arm64 and x86_64 only).")
     parser.add_argument(
         "-g",
         "--gdb",
@@ -207,6 +210,8 @@ def setup_cfg(args):
         * append: The additional values to pass to the kernel command line.
         * architecture: The guest architecture from the list of supported
                         architectures.
+        * efi: Whether or not to boot the guest under UEFI (arm64 and x86_64
+               only).
         * gdb: Whether or not the user wants to debug the kernel using GDB.
         * gdb_bin: The name of or path to the GDB executable that the user
                    wants to debug with.
@@ -234,6 +239,7 @@ def setup_cfg(args):
 
         # Optional
         "append": args.append,
+        "efi": args.efi,
         "gdb": args.gdb,
         "gdb_bin": args.gdb_bin,
         "interactive": args.interactive or args.gdb,
@@ -352,6 +358,90 @@ def get_and_decomp_rootfs(cfg):
     return rootfs
 
 
+def get_efi_args(guest_arch):
+    """
+    Generate QEMU arguments for EFI and performing any necessary setup steps
+    like preparing firmware files.
+
+    Parameters:
+        guest_arch (str): The architecture of the guest.
+
+    Return:
+        efi_args (list): A list of arguments for QEMU to boot using UEFI.
+    """
+    efi_img_locations = {
+        "arm64": [
+            Path("edk2/aarch64/QEMU_EFI.silent.fd"),  # Fedora
+            Path("edk2/aarch64/QEMU_EFI.fd"),  # Arch Linux (current)
+            Path("edk2-armvirt/aarch64/QEMU_EFI.fd"),  # Arch Linux (old)
+            Path("qemu-efi-aarch64/QEMU_EFI.fd"),  # Debian and Ubuntu
+            None  # Terminator
+        ],
+        "x86_64": [
+            Path("edk2/x64/OVMF_CODE.fd"),  # Arch Linux (current), Fedora
+            Path("edk2-ovmf/x64/OVMF_CODE.fd"),  # Arch Linux (old)
+            Path("OVMF/OVMF_CODE.fd"),  # Debian and Ubuntu
+            None  # Terminator
+        ]
+    }  # yapf: disable
+
+    if guest_arch not in efi_img_locations:
+        utils.yellow(
+            f"Found '--efi' with supported architecture ('{guest_arch}'), continuing as if it was not passed..."
+        )
+        return []
+
+    for efi_img_location in efi_img_locations[guest_arch]:
+        if efi_img_location is None:
+            raise Exception(f"edk2 could not be found for {guest_arch}!")
+        efi_img = Path("/usr/share", efi_img_location)
+        if efi_img.exists():
+            break
+
+    if guest_arch == "arm64":
+        # Sizing the images to 64M is recommended by "Prepare the firmware" section at
+        # https://mirrors.edge.kernel.org/pub/linux/kernel/people/will/docs/qemu/qemu-arm64-howto.html
+        efi_img_size = 64 * 1024 * 1024  # 64M
+
+        efi_img_qemu = base_folder.joinpath("images", guest_arch, "efi.img")
+        shutil.copyfile(efi_img, efi_img_qemu)
+        efi_img_qemu.open(mode="r+b").truncate(efi_img_size)
+
+        efi_vars_qemu = base_folder.joinpath("images", guest_arch,
+                                             "efivars.img")
+        efi_vars_qemu.unlink(missing_ok=True)
+        efi_vars_qemu.open(mode="xb").truncate(efi_img_size)
+
+    elif guest_arch == "x86_64":
+        efi_img_qemu = efi_img  # This is just usable, it is marked read only
+
+        # Copy base EFI variables file
+        efi_vars_locations = [
+            Path("edk2/x64/OVMF_VARS.fd"),  # Arch Linux and Fedora
+            Path("OVMF/OVMF_VARS.fd"),  # Debian and Ubuntu
+            None  # Terminator
+        ]
+        for efi_vars_location in efi_vars_locations:
+            if efi_vars_location is None:
+                raise Exception("OVMF_VARS.fd could not be found!")
+            efi_vars = Path('/usr/share', efi_vars_location)
+            if efi_vars.exists():
+                break
+
+        efi_vars_qemu = base_folder.joinpath("images", guest_arch,
+                                             efi_vars.name)
+        shutil.copyfile(efi_vars, efi_vars_qemu)
+
+    # The RNG is included to get the benefits of a KASLR seed on arm64
+    # and it does not hurt x86_64.
+    return [
+        "-drive", f"if=pflash,format=raw,file={efi_img_qemu},readonly=on",
+        "-drive", f"if=pflash,format=raw,file={efi_vars_qemu}",
+        "-object", "rng-random,filename=/dev/urandom,id=rng0",
+        "-device", "virtio-rng-pci"
+    ]  # yapf: disable
+
+
 def get_qemu_args(cfg):
     """
     Generate the QEMU command from the QEMU executable and parameters, based on
@@ -370,6 +460,7 @@ def get_qemu_args(cfg):
     """
     # Static values from cfg
     arch = cfg["architecture"]
+    efi = cfg["efi"]
     kernel_location = cfg["kernel_location"]
     gdb = cfg["gdb"]
     interactive = cfg["interactive"]
@@ -515,7 +606,7 @@ def get_qemu_args(cfg):
         append += " console=ttyS0 earlycon=uart8250,io,0x3f8"
         kernel_image = "bzImage"
 
-        if use_kvm:
+        if use_kvm and not efi:
             qemu_args += ["-d", "unimp,guest_errors"]
         elif arch == "x86_64":
             qemu_args += ["-cpu", "Nehalem"]
@@ -560,6 +651,10 @@ def get_qemu_args(cfg):
         append += " rdinit=/bin/sh"
     if len(append) > 0:
         qemu_args += ["-append", append.strip()]
+
+    # Handle UEFI firmware if necessary
+    if efi:
+        qemu_args += get_efi_args(arch)
 
     # KVM and '-smp'
     if use_kvm:

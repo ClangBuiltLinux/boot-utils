@@ -1,3 +1,5 @@
-debian.img
+efi.img
+efivars.img
 rootfs.cpio
 rootfs.ext4
+OVMF_VARS.fd

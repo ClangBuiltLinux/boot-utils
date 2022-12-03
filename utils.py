@@ -84,3 +84,13 @@ def red(string):
         string (str): String to print in bold red.
     """
     print(f"\n\033[01;31m{string}\033[0m", flush=True)
+
+
+def yellow(string):
+    """
+    Prints string in bold yellow.
+
+    Parameters:
+        string (str): String to print in bold yellow.
+    """
+    print(f"\n\033[01;33m{string}\033[0m", flush=True)
