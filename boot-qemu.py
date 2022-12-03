@@ -186,8 +186,8 @@ def get_smp_value(args):
     # CONFIG_NR_CPUS then get the actual value if possible.
     config_nr_cpus = 8
     if config_file:
-        with open(config_file) as f:
-            for line in f:
+        with open(config_file, encoding='utf-8') as file:
+            for line in file:
                 if "CONFIG_NR_CPUS=" in line:
                     config_nr_cpus = int(line.split("=", 1)[1])
                     break
