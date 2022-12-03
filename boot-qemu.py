@@ -7,6 +7,7 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
 
 import utils
 
@@ -695,7 +696,7 @@ def launch_qemu(cfg):
                 utils.red("ERROR: QEMU timed out!")
             else:
                 utils.red("ERROR: QEMU did not exit cleanly!")
-            exit(ex.returncode)
+            sys.exit(ex.returncode)
 
 
 if __name__ == '__main__':

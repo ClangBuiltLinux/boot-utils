@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import shutil
+import sys
 
 
 def check_cmd(cmd):
@@ -26,7 +27,7 @@ def die(string):
                       automatically.
     """
     red(f"ERROR: {string}")
-    exit(1)
+    sys.exit(1)
 
 
 def get_full_kernel_path(kernel_location, image, arch=None):
