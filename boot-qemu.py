@@ -113,7 +113,6 @@ def can_use_kvm(can_test_for_kvm, guest_arch):
     if can_test_for_kvm:
         # /dev/kvm must exist to use KVM with QEMU
         if Path("/dev/kvm").exists():
-            guest_arch = args.architecture
             host_arch = platform.machine()
 
             if host_arch == "aarch64":
@@ -701,10 +700,10 @@ def launch_qemu(cfg):
 
 
 if __name__ == '__main__':
-    args = parse_arguments()
+    arguments = parse_arguments()
 
     # Build configuration from arguments and QEMU flags
-    cfg = setup_cfg(args)
-    cfg = get_qemu_args(cfg)
+    config = setup_cfg(arguments)
+    config = get_qemu_args(config)
 
-    launch_qemu(cfg)
+    launch_qemu(config)

@@ -57,17 +57,17 @@ def decomp_rootfs():
     return rootfs
 
 
-def run_kernel(kernel, rootfs, interactive):
+def run_kernel(kernel_image, rootfs, interactive):
     """
     Run UML command with path to rootfs and additional arguments based on user
     input.
 
     Parameters:
-        * kernel (Path): kernel Path object containing full path to kernel.
+        * kernel_image (Path): kernel Path object containing full path to kernel.
         * rootfs (Path): rootfs Path object containing full path to rootfs.
         * interactive (bool): Whether or not to run UML interactively.
     """
-    uml_cmd = [kernel, f"ubd0={rootfs}"]
+    uml_cmd = [kernel_image, f"ubd0={rootfs}"]
     if interactive:
         uml_cmd += ["init=/bin/sh"]
     print(f"$ {' '.join([str(element) for element in uml_cmd])}")
@@ -77,6 +77,5 @@ def run_kernel(kernel, rootfs, interactive):
 if __name__ == '__main__':
     args = parse_arguments()
     kernel = utils.get_full_kernel_path(args.kernel_location, "linux")
-    rootfs = decomp_rootfs()
 
-    run_kernel(kernel, rootfs, args.interactive)
+    run_kernel(kernel, decomp_rootfs(), args.interactive)
