@@ -129,8 +129,7 @@ def can_use_kvm(can_test_for_kvm, guest_arch):
 
             if host_arch == "x86_64" and "x86" in guest_arch:
                 # Check /proc/cpuinfo for whether or not the machine supports hardware virtualization
-                with open("/proc/cpuinfo") as f:
-                    cpuinfo = f.read()
+                cpuinfo = Path("/proc/cpuinfo").read_text(encoding='utf-8')
                 # SVM is AMD, VMX is Intel
                 return cpuinfo.count("svm") > 0 or cpuinfo.count("vmx") > 0
 
