@@ -122,10 +122,13 @@ def can_use_kvm(can_test_for_kvm, guest_arch):
                     return True
                 # 32-bit EL1 is not always supported, test for it first
                 if guest_arch in ("arm", "arm32_v7"):
-                    check_32_bit_el1_exec = base_folder.joinpath(
+                    check_32_bit_el1 = base_folder.joinpath(
                         "utils", "aarch64_32_bit_el1_supported")
-                    check_32_bit_el1 = subprocess.run([check_32_bit_el1_exec])
-                    return check_32_bit_el1.returncode == 0
+                    try:
+                        subprocess.run([check_32_bit_el1], check=True)
+                    except subprocess.CalledSubprocessError:
+                        return False
+                    return True
 
             if host_arch == "x86_64" and "x86" in guest_arch:
                 # Check /proc/cpuinfo for whether or not the machine supports hardware virtualization
@@ -658,7 +661,8 @@ def launch_qemu(cfg):
             utils.check_cmd("lsof")
             lsof = subprocess.run(["lsof", "-i:1234"],
                                   stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL)
+                                  stderr=subprocess.DEVNULL,
+                                  check=False)
             if lsof.returncode == 0:
                 utils.die("Port 1234 is already in use, is QEMU running?")
 
@@ -669,7 +673,7 @@ def launch_qemu(cfg):
                 gdb_cmd = [gdb_bin]
                 gdb_cmd += [kernel_location.joinpath("vmlinux")]
                 gdb_cmd += ["-ex", "target remote :1234"]
-                subprocess.run(gdb_cmd)
+                subprocess.run(gdb_cmd, check=False)
 
                 utils.red("Killing QEMU...")
                 qemu_process.kill()
