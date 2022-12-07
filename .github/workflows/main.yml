@@ -1,10 +1,16 @@
-# Run shellcheck and shfmt on all shell files and yapf on all Python files in this repository
+# Run shellcheck and shfmt on all shell files and several Python linters on all Python files in this repository
 name: Lint checks
 on: [push, pull_request]
 jobs:
+  python:
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ['3.11', '3.10', '3.9', '3.8']
+    uses: ClangBuiltLinux/actions-workflows/.github/workflows/python_lint.yml@main
+    with:
+      python_version: ${{ matrix.version }}
   shellcheck:
     uses: ClangBuiltLinux/actions-workflows/.github/workflows/shellcheck.yml@main
   shfmt:
     uses: ClangBuiltLinux/actions-workflows/.github/workflows/shfmt.yml@main
-  yapf:
-    uses: ClangBuiltLinux/actions-workflows/.github/workflows/yapf.yml@main
