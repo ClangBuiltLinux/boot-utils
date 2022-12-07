@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# pylint: disable=invalid-name
 
 import argparse
 import os
@@ -7,6 +8,7 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
 
 import utils
 
@@ -54,7 +56,7 @@ def parse_arguments():
         "--interactive",
         "--shell",
         action="store_true",
-        help=
+        help=  # noqa: E251
         "Instead of immediately shutting down the machine upon successful boot, pass 'rdinit=/bin/sh' on the kernel command line to allow interacting with the machine via a shell."
     )
     parser.add_argument(
@@ -62,20 +64,20 @@ def parse_arguments():
         "--kernel-location",
         required=True,
         type=str,
-        help=
+        help=  # noqa: E251
         "Path to kernel image or kernel build folder to search for image in. Can be an absolute or relative path."
     )
     parser.add_argument(
         "--no-kvm",
         action="store_true",
-        help=
+        help=  # noqa: E251
         "Do not use KVM for acceleration even when supported (only recommended for debugging)."
     )
     parser.add_argument(
         "-s",
         "--smp",
         type=int,
-        help=
+        help=  # noqa: E251
         "Number of processors for virtual machine. By default, only machines spawned with KVM will use multiple vCPUS."
     )
     parser.add_argument(
@@ -112,7 +114,6 @@ def can_use_kvm(can_test_for_kvm, guest_arch):
     if can_test_for_kvm:
         # /dev/kvm must exist to use KVM with QEMU
         if Path("/dev/kvm").exists():
-            guest_arch = args.architecture
             host_arch = platform.machine()
 
             if host_arch == "aarch64":
@@ -120,16 +121,18 @@ def can_use_kvm(can_test_for_kvm, guest_arch):
                 if "arm64" in guest_arch:
                     return True
                 # 32-bit EL1 is not always supported, test for it first
-                if guest_arch == "arm" or guest_arch == "arm32_v7":
-                    check_32_bit_el1_exec = base_folder.joinpath(
+                if guest_arch in ("arm", "arm32_v7"):
+                    check_32_bit_el1 = base_folder.joinpath(
                         "utils", "aarch64_32_bit_el1_supported")
-                    check_32_bit_el1 = subprocess.run([check_32_bit_el1_exec])
-                    return check_32_bit_el1.returncode == 0
+                    try:
+                        subprocess.run([check_32_bit_el1], check=True)
+                    except subprocess.CalledSubprocessError:
+                        return False
+                    return True
 
             if host_arch == "x86_64" and "x86" in guest_arch:
                 # Check /proc/cpuinfo for whether or not the machine supports hardware virtualization
-                with open("/proc/cpuinfo") as f:
-                    cpuinfo = f.read()
+                cpuinfo = Path("/proc/cpuinfo").read_text(encoding='utf-8')
                 # SVM is AMD, VMX is Intel
                 return cpuinfo.count("svm") > 0 or cpuinfo.count("vmx") > 0
 
@@ -186,8 +189,8 @@ def get_smp_value(args):
     # CONFIG_NR_CPUS then get the actual value if possible.
     config_nr_cpus = 8
     if config_file:
-        with open(config_file) as f:
-            for line in f:
+        with open(config_file, encoding='utf-8') as file:
+            for line in file:
                 if "CONFIG_NR_CPUS=" in line:
                     config_nr_cpus = int(line.split("=", 1)[1])
                     break
@@ -400,7 +403,7 @@ def get_qemu_args(cfg):
         qemu = "qemu-system-arm"
         qemu_args += ["-machine", "romulus-bmc"]
 
-    elif arch == "arm" or arch == "arm32_v7":
+    elif arch in ("arm", "arm32_v7"):
         append += " console=ttyAMA0 earlycon"
         kernel_arch = "arm"
         qemu_args += ["-machine", "virt"]
@@ -410,7 +413,7 @@ def get_qemu_args(cfg):
         else:
             qemu = "qemu-system-arm"
 
-    elif arch == "arm64" or arch == "arm64be":
+    elif arch in ("arm64", "arm64be"):
         append += " console=ttyAMA0 earlycon"
         kernel_arch = "arm64"
         kernel_image = "Image.gz"
@@ -452,7 +455,7 @@ def get_qemu_args(cfg):
         qemu_args += ["-cpu", "m68040"]
         qemu_args += ["-M", "q800"]
 
-    elif arch == "mips" or arch == "mipsel":
+    elif arch in ("mips", "mipsel"):
         kernel_arch = "mips"
         kernel_image = "vmlinux"
         qemu = f"qemu-system-{arch}"
@@ -658,23 +661,22 @@ def launch_qemu(cfg):
             utils.check_cmd("lsof")
             lsof = subprocess.run(["lsof", "-i:1234"],
                                   stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL)
+                                  stderr=subprocess.DEVNULL,
+                                  check=False)
             if lsof.returncode == 0:
                 utils.die("Port 1234 is already in use, is QEMU running?")
 
             utils.green("Starting QEMU with GDB connection on port 1234...")
-            qemu_process = subprocess.Popen(qemu_cmd + ["-s", "-S"])
+            with subprocess.Popen(qemu_cmd + ["-s", "-S"]) as qemu_process:
+                utils.green("Starting GDB...")
+                utils.check_cmd(gdb_bin)
+                gdb_cmd = [gdb_bin]
+                gdb_cmd += [kernel_location.joinpath("vmlinux")]
+                gdb_cmd += ["-ex", "target remote :1234"]
+                subprocess.run(gdb_cmd, check=False)
 
-            utils.green("Starting GDB...")
-            utils.check_cmd(gdb_bin)
-            gdb_cmd = [gdb_bin]
-            gdb_cmd += [kernel_location.joinpath("vmlinux")]
-            gdb_cmd += ["-ex", "target remote :1234"]
-            subprocess.run(gdb_cmd)
-
-            utils.red("Killing QEMU...")
-            qemu_process.kill()
-            qemu_process.wait()
+                utils.red("Killing QEMU...")
+                qemu_process.kill()
 
             answer = input("Re-run QEMU + gdb? [y/n] ")
             if answer.lower() == "n":
@@ -695,14 +697,14 @@ def launch_qemu(cfg):
                 utils.red("ERROR: QEMU timed out!")
             else:
                 utils.red("ERROR: QEMU did not exit cleanly!")
-            exit(ex.returncode)
+            sys.exit(ex.returncode)
 
 
 if __name__ == '__main__':
-    args = parse_arguments()
+    arguments = parse_arguments()
 
     # Build configuration from arguments and QEMU flags
-    cfg = setup_cfg(args)
-    cfg = get_qemu_args(cfg)
+    config = setup_cfg(arguments)
+    config = get_qemu_args(config)
 
-    launch_qemu(cfg)
+    launch_qemu(config)
