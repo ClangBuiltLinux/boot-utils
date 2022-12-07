@@ -390,7 +390,7 @@ def get_efi_args(guest_arch):
 
     if guest_arch not in efi_img_locations:
         utils.yellow(
-            f"Found '--efi' with supported architecture ('{guest_arch}'), continuing as if it was not passed..."
+            f"EFI boot requested for unsupported architecture ('{guest_arch}'), ignoring..."
         )
         return []
 
