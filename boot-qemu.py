@@ -2,6 +2,8 @@
 # pylint: disable=invalid-name
 
 import argparse
+import contextlib
+import grp
 import os
 from pathlib import Path
 import platform
@@ -13,6 +15,7 @@ import sys
 import utils
 
 base_folder = Path(__file__).resolve().parent
+shared_folder = base_folder.joinpath('shared')
 supported_architectures = [
     "arm", "arm32_v5", "arm32_v6", "arm32_v7", "arm64", "arm64be", "m68k",
     "mips", "mipsel", "ppc32", "ppc32_mac", "ppc64", "ppc64le", "riscv",
@@ -82,6 +85,12 @@ def parse_arguments():
         type=int,
         help=  # noqa: E251
         "Number of processors for virtual machine. By default, only machines spawned with KVM will use multiple vCPUS."
+    )
+    parser.add_argument(
+        "--share-folder",
+        action='store_true',
+        help=  # noqa: E251
+        f"Share {shared_folder} with the guest using virtiofs (requires interactive, not supported with gdb)."
     )
     parser.add_argument(
         "-t",
@@ -223,6 +232,7 @@ def setup_cfg(args):
         * interactive: Whether or not the user is going to be running the
                        machine interactively.
         * kernel_location: The full path to the kernel image or build folder.
+        * share_folder_with_guest: Share a folder on the host with a guest.
         * smp_requested: Whether or not the user specified a value with
                          '--smp'.
         * smp_value: The value to use with '-smp' (will be used when
@@ -248,6 +258,7 @@ def setup_cfg(args):
         "gdb": args.gdb,
         "gdb_bin": args.gdb_bin,
         "interactive": args.interactive or args.gdb,
+        "share_folder_with_guest": args.share_folder,
         "smp_requested": args.smp is not None,
         "smp_value": get_smp_value(args),
         "timeout": args.timeout,
@@ -735,7 +746,57 @@ def launch_qemu(cfg):
     gdb_bin = cfg["gdb_bin"]
     kernel_location = cfg["kernel_location"]
     qemu_cmd = cfg["qemu_cmd"]
+    share_folder_with_guest = cfg["share_folder_with_guest"]
     timeout = cfg["timeout"]
+
+    if share_folder_with_guest and not interactive:
+        utils.yellow(
+            'Shared folder requested without an interactive session, ignoring...'
+        )
+        share_folder_with_guest = False
+    if share_folder_with_guest and gdb:
+        utils.yellow(
+            'Shared folder requested during a debugging session, ignoring...')
+        share_folder_with_guest = False
+
+    if share_folder_with_guest:
+        shared_folder.mkdir(exist_ok=True, parents=True)
+
+        # If shared folder was requested, we need to search for virtiofsd in
+        # certain known locations.
+        qemu_prefix = Path(qemu_cmd[0]).resolve().parent.parent
+        virtiofsd_locations = [
+            Path('libexec', 'virtiofsd'),  # Default QEMU installation, Fedora
+            Path('lib', 'qemu', 'virtiofsd'),  # Arch Linux, Debian, Ubuntu
+        ]
+        virtiofsd = utils.find_first_file(qemu_prefix, virtiofsd_locations)
+
+        if not (sudo := shutil.which('sudo')):
+            raise Exception(
+                'sudo is required to use virtiofsd but it could not be found!')
+        utils.green(
+            'Requesting sudo permission to run virtiofsd in the background...')
+        subprocess.run([sudo, 'true'], check=True)
+
+        virtiofsd_log = base_folder.joinpath('.vfsd.log')
+        virtiofsd_mem = base_folder.joinpath('.vfsd.mem')
+        virtiofsd_socket = base_folder.joinpath('.vfsd.sock')
+        virtiofsd_cmd = [
+            sudo,
+            virtiofsd,
+            f"--socket-group={grp.getgrgid(os.getgid()).gr_name}",
+            f"--socket-path={virtiofsd_socket}",
+            '-o', f"source={shared_folder}",
+            '-o', 'cache=always',
+        ]  # yapf: disable
+
+        qemu_mem = qemu_cmd[qemu_cmd.index('-m') + 1]
+        qemu_cmd += [
+            '-chardev', f"socket,id=char0,path={virtiofsd_socket}",
+            '-device', 'vhost-user-fs-pci,queue-size=1024,chardev=char0,tag=shared',
+            '-object', f"memory-backend-file,id=shm,mem-path={virtiofsd_mem},share=on,size={qemu_mem}",
+            '-numa', 'node,memdev=shm',
+        ]  # yapf: disable
 
     # Print information about the QEMU binary
     pretty_print_qemu_info(qemu_cmd[0])
@@ -782,14 +843,31 @@ def launch_qemu(cfg):
             qemu_cmd = timeout_cmd + stdbuf_cmd + qemu_cmd
 
         pretty_print_qemu_cmd(qemu_cmd)
-        try:
-            subprocess.run(qemu_cmd, check=True)
-        except subprocess.CalledProcessError as ex:
-            if ex.returncode == 124:
-                utils.red("ERROR: QEMU timed out!")
-            else:
-                utils.red("ERROR: QEMU did not exit cleanly!")
-            sys.exit(ex.returncode)
+        null_cm = contextlib.nullcontext()
+        with open(virtiofsd_log, 'w', encoding='utf-8') if share_folder_with_guest else null_cm as vfsd_log, \
+             subprocess.Popen(virtiofsd_cmd, stderr=vfsd_log, stdout=vfsd_log) if share_folder_with_guest else null_cm as vfsd_process:
+            try:
+                subprocess.run(qemu_cmd, check=True)
+            except subprocess.CalledProcessError as ex:
+                if ex.returncode == 124:
+                    utils.red("ERROR: QEMU timed out!")
+                else:
+                    utils.red("ERROR: QEMU did not exit cleanly!")
+                    # If virtiofsd is dead, it is pretty likely that it was the
+                    # cause of QEMU failing so add to the existing exception using
+                    # 'from'.
+                    if vfsd_process and vfsd_process.poll():
+                        vfsd_log_txt = virtiofsd_log.read_text(
+                            encoding='utf-8')
+                        raise Exception(
+                            f"virtiofsd failed with: {vfsd_log_txt}") from ex
+                sys.exit(ex.returncode)
+            finally:
+                if vfsd_process:
+                    vfsd_process.kill()
+                    # Delete the memory to save space, it does not have to be
+                    # persistent
+                    virtiofsd_mem.unlink(missing_ok=True)
 
 
 if __name__ == '__main__':
