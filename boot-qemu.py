@@ -886,6 +886,7 @@ def launch_qemu_fg(cfg):
         cfg (dict): The configuration dictionary generated with setup_cfg().
     """
     interactive = cfg["interactive"]
+    kernel_location = cfg["kernel_location"]
     qemu_cmd = cfg["qemu_cmd"] + ["-serial", "mon:stdio"]
     share_folder_with_guest = cfg["share_folder_with_guest"]
     timeout = cfg["timeout"]
@@ -897,6 +898,16 @@ def launch_qemu_fg(cfg):
         share_folder_with_guest = False
 
     if share_folder_with_guest:
+        if not get_config_val(kernel_location, 'CONFIG_VIRTIO_FS'):
+            utils.yellow(
+                'CONFIG_VIRTIO_FS may not be enabled in your configuration, shared folder may not work...'
+            )
+
+        # Print information about using shared folder
+        utils.green('To mount shared folder in guest (e.g. to /mnt/shared):')
+        utils.green('\t/ # mkdir /mnt/shared')
+        utils.green('\t/ # mount -t virtiofs shared /mnt/shared')
+
         shared_folder.mkdir(exist_ok=True, parents=True)
 
         virtiofsd_log = base_folder.joinpath('.vfsd.log')
