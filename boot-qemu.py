@@ -698,7 +698,7 @@ def pretty_print_qemu_info(qemu):
     qemu_version_string = get_qemu_ver_string(qemu)
 
     utils.green(f"QEMU location: \033[0m{qemu_dir}")
-    utils.green(f"QEMU version: \033[0m{qemu_version_string}\n")
+    utils.green(f"QEMU version: \033[0m{qemu_version_string}")
 
 
 def pretty_print_qemu_cmd(qemu_cmd):
@@ -723,29 +723,159 @@ def pretty_print_qemu_cmd(qemu_cmd):
             qemu_cmd_pretty += f' {element.split("/")[-1]}'
         else:
             qemu_cmd_pretty += f" {element}"
-    print(f"$ {qemu_cmd_pretty.strip()}", flush=True)
+    print(f"\n$ {qemu_cmd_pretty.strip()}", flush=True)
 
 
-def launch_qemu(cfg):
+def launch_qemu_gdb(cfg):
     """
-    Runs the QEMU command generated from get_qemu_args(), depending on whether
-    or not the user wants to debug with GDB.
+    Spawn QEMU in the background with '-s -S' and call gdb_bin against
+    'vmlinux' with the target remote command. This is repeated until the user
+    quits.
 
-    If debugging with GDB, QEMU is called with '-s -S' in the background then
-    gdb_bin is called against 'vmlinux' connected to the target remote. This
-    can be repeated multiple times.
+    Parameters:
+        cfg (dict): The configuration dictionary generated with setup_cfg().
+    """
+    gdb_bin = cfg["gdb_bin"]
+    kernel_location = cfg["kernel_location"]
+    qemu_cmd = cfg["qemu_cmd"] + ['-s', '-S']
 
-    Otherwise, QEMU is called with 'timeout' so that it is terminated if there
-    is a problem while booting, passing along any error code that is returned.
+    if cfg['share_folder_with_guest']:
+        utils.yellow(
+            'Shared folder requested during a debugging session, ignoring...')
+
+    # Make sure necessary commands are present
+    utils.check_cmd(gdb_bin)
+    utils.check_cmd('lsof')
+
+    # Generate gdb command and add necessary arguments to QEMU command
+    gdb_cmd = [
+        gdb_bin,
+        kernel_location.joinpath('vmlinux'),
+        '-ex', 'target remove :1234'
+    ]  # yapf: disable
+
+    while True:
+        lsof = subprocess.run(['lsof', '-i:1234'],
+                              stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL,
+                              check=False)
+        if lsof.returncode == 0:
+            utils.die("Port 1234 is already in use, is QEMU running?")
+
+        utils.green("Starting QEMU with GDB connection on port 1234...")
+        with subprocess.Popen(qemu_cmd, preexec_fn=os.setpgrp) as qemu_process:
+            utils.green("Starting GDB...")
+            with subprocess.Popen(gdb_cmd) as gdb_process:
+                try:
+                    gdb_process.wait()
+                except KeyboardInterrupt:
+                    pass
+
+            utils.red("Killing QEMU...")
+            qemu_process.kill()
+
+        answer = input("Re-run QEMU + gdb? [y/n] ")
+        if answer.lower() == "n":
+            break
+
+
+def find_virtiofsd(qemu_prefix):
+    """
+    Find virtiofsd relative to qemu_prefix.
+
+    Parameters:
+        qemu_prefix (Path): A Path object pointing to QEMU's installation prefix.
+
+    Returns:
+        The full path to virtiofsd.
+    """
+    virtiofsd_locations = [
+        Path('libexec', 'virtiofsd'),  # Default QEMU installation, Fedora
+        Path('lib', 'qemu', 'virtiofsd'),  # Arch Linux, Debian, Ubuntu
+    ]
+    return utils.find_first_file(qemu_prefix, virtiofsd_locations)
+
+
+def get_and_call_sudo():
+    """
+    Get the full path to a sudo binary and call it to gain sudo permission to
+    run virtiofsd in the background. virtiofsd is spawned in the background so
+    we cannot interact with it; getting permission beforehand allows everything
+    to work properly.
+
+    Returns:
+        The full path to a suitable sudo binary.
+    """
+    if not (sudo := shutil.which('sudo')):
+        raise Exception(
+            'sudo is required to use virtiofsd but it could not be found!')
+    utils.green(
+        'Requesting sudo permission to run virtiofsd in the background...')
+    subprocess.run([sudo, 'true'], check=True)
+    return sudo
+
+
+def get_virtiofsd_cmd(qemu_path, socket_path):
+    """
+    Generate a virtiofsd command suitable for running through
+    subprocess.Popen().
+
+    This is the command as recommended by the virtio-fs website:
+    https://virtio-fs.gitlab.io/howto-qemu.html
+
+    Parameters:
+        qemu_path (Path): An absolute path to the QEMU binary being used.
+        socket_path (Path): An absolute path to the socket file virtiofsd
+                            will use to communicate with QEMU.
+
+    Returns:
+        The virtiofsd command as a list.
+    """
+    sudo = get_and_call_sudo()
+    virtiofsd = find_virtiofsd(qemu_path.resolve().parent.parent)
+
+    return [
+        sudo,
+        virtiofsd,
+        f"--socket-group={grp.getgrgid(os.getgid()).gr_name}",
+        f"--socket-path={socket_path}",
+        '-o', f"source={shared_folder}",
+        '-o', 'cache=always',
+    ]  # yapf: disable
+
+
+def get_virtiofs_qemu_args(mem_path, qemu_mem, socket_path):
+    """
+    Generate a list of arguments for QEMU to use virtiofs.
+
+    These are the arguments as recommended by the virtio-fs website:
+    https://virtio-fs.gitlab.io/howto-qemu.html
+
+    Parameters:
+        mem_path (Path): An absolute path to the memory file that virtiofs will
+                         be using.
+        qemu_mem (str): The amount of memory QEMU will be using.
+        socket_path (Path): An absolute path to the socket file virtiofsd
+                            will use to communicate with QEMU.
+    """
+    return [
+        '-chardev', f"socket,id=char0,path={socket_path}",
+        '-device', 'vhost-user-fs-pci,queue-size=1024,chardev=char0,tag=shared',
+        '-object', f"memory-backend-file,id=shm,mem-path={mem_path},share=on,size={qemu_mem}",
+        '-numa', 'node,memdev=shm',
+    ]  # yapf: disable
+
+
+def launch_qemu_fg(cfg):
+    """
+    Spawn QEMU in the foreground, using 'timeout' if running non-interactively
+    to see if the kernel successfully gets to userspace.
 
     Parameters:
         cfg (dict): The configuration dictionary generated with setup_cfg().
     """
     interactive = cfg["interactive"]
-    gdb = cfg["gdb"]
-    gdb_bin = cfg["gdb_bin"]
-    kernel_location = cfg["kernel_location"]
-    qemu_cmd = cfg["qemu_cmd"]
+    qemu_cmd = cfg["qemu_cmd"] + ["-serial", "mon:stdio"]
     share_folder_with_guest = cfg["share_folder_with_guest"]
     timeout = cfg["timeout"]
 
@@ -754,120 +884,50 @@ def launch_qemu(cfg):
             'Shared folder requested without an interactive session, ignoring...'
         )
         share_folder_with_guest = False
-    if share_folder_with_guest and gdb:
-        utils.yellow(
-            'Shared folder requested during a debugging session, ignoring...')
-        share_folder_with_guest = False
 
     if share_folder_with_guest:
         shared_folder.mkdir(exist_ok=True, parents=True)
 
-        # If shared folder was requested, we need to search for virtiofsd in
-        # certain known locations.
-        qemu_prefix = Path(qemu_cmd[0]).resolve().parent.parent
-        virtiofsd_locations = [
-            Path('libexec', 'virtiofsd'),  # Default QEMU installation, Fedora
-            Path('lib', 'qemu', 'virtiofsd'),  # Arch Linux, Debian, Ubuntu
-        ]
-        virtiofsd = utils.find_first_file(qemu_prefix, virtiofsd_locations)
-
-        if not (sudo := shutil.which('sudo')):
-            raise Exception(
-                'sudo is required to use virtiofsd but it could not be found!')
-        utils.green(
-            'Requesting sudo permission to run virtiofsd in the background...')
-        subprocess.run([sudo, 'true'], check=True)
-
         virtiofsd_log = base_folder.joinpath('.vfsd.log')
         virtiofsd_mem = base_folder.joinpath('.vfsd.mem')
         virtiofsd_socket = base_folder.joinpath('.vfsd.sock')
-        virtiofsd_cmd = [
-            sudo,
-            virtiofsd,
-            f"--socket-group={grp.getgrgid(os.getgid()).gr_name}",
-            f"--socket-path={virtiofsd_socket}",
-            '-o', f"source={shared_folder}",
-            '-o', 'cache=always',
-        ]  # yapf: disable
 
-        qemu_mem = qemu_cmd[qemu_cmd.index('-m') + 1]
-        qemu_cmd += [
-            '-chardev', f"socket,id=char0,path={virtiofsd_socket}",
-            '-device', 'vhost-user-fs-pci,queue-size=1024,chardev=char0,tag=shared',
-            '-object', f"memory-backend-file,id=shm,mem-path={virtiofsd_mem},share=on,size={qemu_mem}",
-            '-numa', 'node,memdev=shm',
-        ]  # yapf: disable
+        virtiofsd_cmd = get_virtiofsd_cmd(Path(qemu_cmd[0]), virtiofsd_socket)
 
-    # Print information about the QEMU binary
-    pretty_print_qemu_info(qemu_cmd[0])
+        qemu_mem_val = qemu_cmd[qemu_cmd.index('-m') + 1]
+        qemu_cmd += get_virtiofs_qemu_args(virtiofsd_mem, qemu_mem_val,
+                                           virtiofsd_socket)
 
-    if gdb:
-        utils.check_cmd(gdb_bin)
-        qemu_cmd += ["-s", "-S"]
+    if not interactive:
+        timeout_cmd = ["timeout", "--foreground", timeout]
+        stdbuf_cmd = ["stdbuf", "-oL", "-eL"]
+        qemu_cmd = timeout_cmd + stdbuf_cmd + qemu_cmd
 
-        while True:
-            utils.check_cmd("lsof")
-            lsof = subprocess.run(["lsof", "-i:1234"],
-                                  stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL,
-                                  check=False)
-            if lsof.returncode == 0:
-                utils.die("Port 1234 is already in use, is QEMU running?")
-
-            utils.green("Starting QEMU with GDB connection on port 1234...")
-            with subprocess.Popen(qemu_cmd,
-                                  preexec_fn=os.setpgrp) as qemu_process:
-                utils.green("Starting GDB...")
-                gdb_cmd = [gdb_bin]
-                gdb_cmd += [kernel_location.joinpath("vmlinux")]
-                gdb_cmd += ["-ex", "target remote :1234"]
-
-                with subprocess.Popen(gdb_cmd) as gdb_process:
-                    try:
-                        gdb_process.wait()
-                    except KeyboardInterrupt:
-                        pass
-
-                utils.red("Killing QEMU...")
-                qemu_process.kill()
-
-            answer = input("Re-run QEMU + gdb? [y/n] ")
-            if answer.lower() == "n":
-                break
-    else:
-        qemu_cmd += ["-serial", "mon:stdio"]
-
-        if not interactive:
-            timeout_cmd = ["timeout", "--foreground", timeout]
-            stdbuf_cmd = ["stdbuf", "-oL", "-eL"]
-            qemu_cmd = timeout_cmd + stdbuf_cmd + qemu_cmd
-
-        pretty_print_qemu_cmd(qemu_cmd)
-        null_cm = contextlib.nullcontext()
-        with open(virtiofsd_log, 'w', encoding='utf-8') if share_folder_with_guest else null_cm as vfsd_log, \
-             subprocess.Popen(virtiofsd_cmd, stderr=vfsd_log, stdout=vfsd_log) if share_folder_with_guest else null_cm as vfsd_process:
-            try:
-                subprocess.run(qemu_cmd, check=True)
-            except subprocess.CalledProcessError as ex:
-                if ex.returncode == 124:
-                    utils.red("ERROR: QEMU timed out!")
-                else:
-                    utils.red("ERROR: QEMU did not exit cleanly!")
-                    # If virtiofsd is dead, it is pretty likely that it was the
-                    # cause of QEMU failing so add to the existing exception using
-                    # 'from'.
-                    if vfsd_process and vfsd_process.poll():
-                        vfsd_log_txt = virtiofsd_log.read_text(
-                            encoding='utf-8')
-                        raise Exception(
-                            f"virtiofsd failed with: {vfsd_log_txt}") from ex
-                sys.exit(ex.returncode)
-            finally:
-                if vfsd_process:
-                    vfsd_process.kill()
-                    # Delete the memory to save space, it does not have to be
-                    # persistent
-                    virtiofsd_mem.unlink(missing_ok=True)
+    pretty_print_qemu_cmd(qemu_cmd)
+    null_cm = contextlib.nullcontext()
+    with open(virtiofsd_log, 'w', encoding='utf-8') if share_folder_with_guest else null_cm as vfsd_log, \
+         subprocess.Popen(virtiofsd_cmd, stderr=vfsd_log, stdout=vfsd_log) if share_folder_with_guest else null_cm as vfsd_process:
+        try:
+            subprocess.run(qemu_cmd, check=True)
+        except subprocess.CalledProcessError as ex:
+            if ex.returncode == 124:
+                utils.red("ERROR: QEMU timed out!")
+            else:
+                utils.red("ERROR: QEMU did not exit cleanly!")
+                # If virtiofsd is dead, it is pretty likely that it was the
+                # cause of QEMU failing so add to the existing exception using
+                # 'from'.
+                if vfsd_process and vfsd_process.poll():
+                    vfsd_log_txt = virtiofsd_log.read_text(encoding='utf-8')
+                    raise Exception(
+                        f"virtiofsd failed with: {vfsd_log_txt}") from ex
+            sys.exit(ex.returncode)
+        finally:
+            if vfsd_process:
+                vfsd_process.kill()
+                # Delete the memory to save space, it does not have to be
+                # persistent
+                virtiofsd_mem.unlink(missing_ok=True)
 
 
 if __name__ == '__main__':
@@ -877,4 +937,10 @@ if __name__ == '__main__':
     config = setup_cfg(arguments)
     config = get_qemu_args(config)
 
-    launch_qemu(config)
+    # Print information about the QEMU binary
+    pretty_print_qemu_info(config['qemu_cmd'][0])
+
+    if config['gdb']:
+        launch_qemu_gdb(config)
+    else:
+        launch_qemu_fg(config)
