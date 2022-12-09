@@ -93,53 +93,55 @@ def parse_arguments():
     return parser.parse_args()
 
 
+def arm64_have_el1_32():
+    """
+    Calls 'aarch64_32_bit_el1_supported' to see if 32-bit EL1 is supported on
+    the current machine.
+
+    Returns:
+        True if 32-bit EL1 is supported, false if not
+    """
+    try:
+        subprocess.run(base_folder.joinpath('utils',
+                                            'aarch64_32_bit_el1_supported'),
+                       check=True)
+    except subprocess.CalledProcessError:
+        return False
+    return True
+
+
 def can_use_kvm(can_test_for_kvm, guest_arch):
     """
     Checks that KVM can be used for faster VMs based on:
         * User's request
             * Whether or not '--no-kvm' was used
-        * '/dev/kvm' is available
-        * The guest architecture
-            * Only 'arm'/'arm32_v7', 'arm64', 'arm64be', 'x86', and 'x86_64'
-              are supported with KVM
-        * Availability of hardware virtualization support
-            * aarch64 may not support accelerated 32-bit guests
-            * i386 and x86_64 need the virtualization extensions in
-              '/proc/cpuinfo'
+        * '/dev/kvm' is readable and writable by the current user
+            * Implies hardware virtualization support
+        * The host architecture relative to guest architecture
+            * aarch64 always supports accelerated aarch64 guests, may support
+              accelerated aarch32 guests
+            * x86_64 always supports accelerated 64-bit and 32-bit x86 guests
 
     Parameters:
-        user_kvm_opt_out (bool): False if user passed in '--no-kvm', True if not
+        can_test_for_vm (bool): False if user passed in '--no-kvm', True if not
         guest_arch (str): The guest architecture being run.
 
     Returns:
         True if KVM can be used based on the above parameters, False if not.
     """
-    if can_test_for_kvm:
-        # /dev/kvm must exist to use KVM with QEMU
-        if Path("/dev/kvm").exists():
-            host_arch = platform.machine()
+    # /dev/kvm must be readable and writeable to use KVM with QEMU
+    if can_test_for_kvm and os.access('/dev/kvm', os.R_OK | os.W_OK):
+        host_arch = platform.machine()
 
-            if host_arch == "aarch64":
-                # If /dev/kvm exists on aarch64, KVM is supported for aarch64 guests
-                if "arm64" in guest_arch:
-                    return True
-                # 32-bit EL1 is not always supported, test for it first
-                if guest_arch in ("arm", "arm32_v7"):
-                    check_32_bit_el1 = base_folder.joinpath(
-                        "utils", "aarch64_32_bit_el1_supported")
-                    try:
-                        subprocess.run([check_32_bit_el1], check=True)
-                    except subprocess.CalledSubprocessError:
-                        return False
-                    return True
+        if host_arch == "aarch64":
+            if guest_arch in ('arm', 'arm32_v7'):
+                return arm64_have_el1_32()
+            return "arm64" in guest_arch
 
-            if host_arch == "x86_64" and "x86" in guest_arch:
-                # Check /proc/cpuinfo for whether or not the machine supports hardware virtualization
-                cpuinfo = Path("/proc/cpuinfo").read_text(encoding='utf-8')
-                # SVM is AMD, VMX is Intel
-                return cpuinfo.count("svm") > 0 or cpuinfo.count("vmx") > 0
+        if host_arch == "x86_64":
+            return "x86" in guest_arch
 
-    # We could not prove that we could use KVM safely so don't try
+    # If we could not prove that we can use KVM safely, don't try
     return False
 
 
