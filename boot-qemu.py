@@ -154,6 +154,42 @@ def can_use_kvm(can_test_for_kvm, guest_arch):
     return False
 
 
+def get_config_val(kernel_arg, config_key):
+    """
+    Attempt to get configuration value from a .config relative to
+    kernel_location.
+
+    Parameters:
+        kernel_arg (str): The value of the '--kernel' argument.
+
+    Returns:
+        The configuration value if it can be found, None if not.
+    """
+    # kernel_arg is either a path to the kernel source or a full kernel
+    # location. If it is a file, we need to strip off the basename so that we
+    # can easily navigate around with '..'.
+    if (kernel_dir := Path(kernel_arg)).is_file():
+        kernel_dir = kernel_dir.parent
+
+    # If kernel_location is the kernel source, the configuration will be at
+    # <kernel_dir>/.config
+    #
+    # If kernel_location is a full kernel location, it could either be:
+    #   * <kernel_dir>/.config (if the image is vmlinux)
+    #   * <kernel_dir>/../../../.config (if the image is in arch/*/boot/)
+    #   * <kernel_dir>/config (if the image is in a TuxMake folder)
+    config_locations = [".config", "../../../.config", "config"]
+    if (config_file := utils.find_first_file(kernel_dir,
+                                             config_locations,
+                                             required=False)):
+        config_txt = config_file.read_text(encoding='utf-8')
+        if (match := re.search(f"^{config_key}=(.*)$", config_txt,
+                               flags=re.M)):
+            return match.groups()[0]
+
+    return None
+
+
 def get_smp_value(args):
     """
     Get the value of '-smp' based on user input and kernel configuration.
@@ -178,41 +214,16 @@ def get_smp_value(args):
     if args.smp:
         return args.smp
 
-    # kernel_location is either a path to the kernel source or a full kernel
-    # location. If it is a file, we need to strip off the basename so that we
-    # can easily navigate around with '..'.
-    kernel_dir = Path(args.kernel_location)
-    if kernel_dir.is_file():
-        kernel_dir = kernel_dir.parent
-
-    # If kernel_location is the kernel source, the configuration will be at
-    # <kernel_dir>/.config
-    #
-    # If kernel_location is a full kernel location, it could either be:
-    #   * <kernel_dir>/.config (if the image is vmlinux)
-    #   * <kernel_dir>/../../../.config (if the image is in arch/*/boot/)
-    #   * <kernel_dir>/config (if the image is in a TuxMake folder)
-    config_file = None
-    for config_name in [".config", "../../../.config", "config"]:
-        config_path = kernel_dir.joinpath(config_name)
-        if config_path.is_file():
-            config_file = config_path
-            break
-
     # Choose a sensible default value based on treewide defaults for
     # CONFIG_NR_CPUS then get the actual value if possible.
-    config_nr_cpus = 8
-    if config_file:
-        with open(config_file, encoding='utf-8') as file:
-            for line in file:
-                if "CONFIG_NR_CPUS=" in line:
-                    config_nr_cpus = int(line.split("=", 1)[1])
-                    break
+    if not (config_nr_cpus := get_config_val(args.kernel_location,
+                                             'CONFIG_NR_CPUS')):
+        config_nr_cpus = 8
 
     # Use the minimum of the number of usable processors for the script or
     # CONFIG_NR_CPUS.
     usable_cpus = os.cpu_count()
-    return min(usable_cpus, config_nr_cpus)
+    return min(usable_cpus, int(config_nr_cpus))
 
 
 def setup_cfg(args):
