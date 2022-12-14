@@ -754,6 +754,8 @@ def launch_qemu(cfg):
     pretty_print_qemu_info(qemu_cmd[0])
 
     if gdb:
+        utils.check_cmd(gdb_bin)
+
         while True:
             utils.check_cmd("lsof")
             lsof = subprocess.run(["lsof", "-i:1234"],
@@ -766,7 +768,6 @@ def launch_qemu(cfg):
             utils.green("Starting QEMU with GDB connection on port 1234...")
             with subprocess.Popen(qemu_cmd + ["-s", "-S"]) as qemu_process:
                 utils.green("Starting GDB...")
-                utils.check_cmd(gdb_bin)
                 gdb_cmd = [gdb_bin]
                 gdb_cmd += [kernel_location.joinpath("vmlinux")]
                 gdb_cmd += ["-ex", "target remote :1234"]
