@@ -755,6 +755,7 @@ def launch_qemu(cfg):
 
     if gdb:
         utils.check_cmd(gdb_bin)
+        qemu_cmd += ["-s", "-S"]
 
         while True:
             utils.check_cmd("lsof")
@@ -766,12 +767,18 @@ def launch_qemu(cfg):
                 utils.die("Port 1234 is already in use, is QEMU running?")
 
             utils.green("Starting QEMU with GDB connection on port 1234...")
-            with subprocess.Popen(qemu_cmd + ["-s", "-S"]) as qemu_process:
+            with subprocess.Popen(qemu_cmd,
+                                  preexec_fn=os.setpgrp) as qemu_process:
                 utils.green("Starting GDB...")
                 gdb_cmd = [gdb_bin]
                 gdb_cmd += [kernel_location.joinpath("vmlinux")]
                 gdb_cmd += ["-ex", "target remote :1234"]
-                subprocess.run(gdb_cmd, check=False)
+
+                with subprocess.Popen(gdb_cmd) as gdb_process:
+                    try:
+                        gdb_process.wait()
+                    except KeyboardInterrupt:
+                        pass
 
                 utils.red("Killing QEMU...")
                 qemu_process.kill()
