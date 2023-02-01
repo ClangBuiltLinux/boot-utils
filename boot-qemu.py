@@ -398,7 +398,8 @@ def get_efi_args(guest_arch):
 
     for efi_img_location in efi_img_locations[guest_arch]:
         if efi_img_location is None:
-            raise Exception(f"edk2 could not be found for {guest_arch}!")
+            raise FileNotFoundError(
+                f"edk2 could not be found for {guest_arch}!")
         efi_img = Path("/usr/share", efi_img_location)
         if efi_img.exists():
             break
@@ -428,7 +429,7 @@ def get_efi_args(guest_arch):
         ]
         for efi_vars_location in efi_vars_locations:
             if efi_vars_location is None:
-                raise Exception("OVMF_VARS.fd could not be found!")
+                raise FileNotFoundError("OVMF_VARS.fd could not be found!")
             efi_vars = Path('/usr/share', efi_vars_location)
             if efi_vars.exists():
                 break
