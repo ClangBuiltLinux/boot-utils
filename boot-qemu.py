@@ -411,12 +411,14 @@ def get_efi_args(guest_arch):
 
         efi_img_qemu = base_folder.joinpath("images", guest_arch, "efi.img")
         shutil.copyfile(efi_img, efi_img_qemu)
-        efi_img_qemu.open(mode="r+b").truncate(efi_img_size)
+        with efi_img_qemu.open(mode="r+b") as file:
+            file.truncate(efi_img_size)
 
         efi_vars_qemu = base_folder.joinpath("images", guest_arch,
                                              "efivars.img")
         efi_vars_qemu.unlink(missing_ok=True)
-        efi_vars_qemu.open(mode="xb").truncate(efi_img_size)
+        with efi_vars_qemu.open(mode="xb") as file:
+            file.truncate(efi_img_size)
 
     elif guest_arch == "x86_64":
         efi_img_qemu = efi_img  # This is just usable, it is marked read only
