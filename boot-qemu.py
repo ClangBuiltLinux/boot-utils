@@ -238,6 +238,9 @@ def parse_arguments():
         '--kernel-location',
         required=True,
         help='Absolute or relative path to kernel image or build folder.')
+    parser.add_argument('--append',
+                        help='Append items to kernel cmdline',
+                        nargs='+')
     parser.add_argument(
         '--no-kvm',
         action='store_true',
@@ -272,6 +275,9 @@ if __name__ == '__main__':
         runner.kernel = kernel_location
     else:
         runner.kernel_dir = kernel_location
+
+    if args.append:
+        runner.cmdline += args.append
 
     if args.no_kvm:
         runner.use_kvm = False
