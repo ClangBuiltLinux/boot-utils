@@ -28,6 +28,7 @@ SUPPORTED_ARCHES = [
     'ppc32_mac',
     'ppc64',
     'ppc64le',
+    'riscv',
     'x86',
     'x86_64',
 ]
@@ -558,6 +559,26 @@ class PowerPC64LEQEMURunner(QEMURunner):
         self._ram = '2G'
 
 
+class RISCVQEMURunner(QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self.cmdline.append('earlycon')
+        self._default_kernel_path = Path('arch/riscv/boot/Image')
+        self._initrd_arch = 'riscv'
+        self._qemu_arch = 'riscv64'
+
+        deb_bios = '/usr/lib/riscv64-linux-gnu/opensbi/qemu/virt/fw_jump.elf'
+        if 'BIOS' in os.environ:
+            bios = os.environ['BIOS']
+        elif Path(deb_bios).exists():
+            bios = deb_bios
+        else:
+            bios = 'default'
+        self._qemu_args += ['-bios', bios, '-M', 'virt']
+
+
 class X86QEMURunner(QEMURunner):
 
     def __init__(self):
@@ -688,6 +709,7 @@ if __name__ == '__main__':
         'ppc32_mac': PowerPC32MacQEMURunner,
         'ppc64': PowerPC64QEMURunner,
         'ppc64le': PowerPC64LEQEMURunner,
+        'riscv': RISCVQEMURunner,
         'x86': X86QEMURunner,
         'x86_64': X8664QEMURunner,
     }
