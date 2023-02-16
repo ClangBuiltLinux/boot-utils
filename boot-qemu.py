@@ -15,7 +15,16 @@ import sys
 import utils
 
 BOOT_UTILS = Path(__file__).resolve().parent
-SUPPORTED_ARCHES = ['arm64', 'arm64be', 'x86', 'x86_64']
+SUPPORTED_ARCHES = [
+    'arm',
+    'arm32_v5',
+    'arm32_v6',
+    'arm32_v7',
+    'arm64',
+    'arm64be',
+    'x86',
+    'x86_64',
+]
 
 
 class QEMURunner:
@@ -39,10 +48,11 @@ class QEMURunner:
         self.timeout = ''
 
         self._default_kernel_path = None
+        self._dtb = None
         self._efi_img = None
         self._efi_vars = None
         self._initrd_arch = None
-        self._kvm_cpu = 'host'
+        self._kvm_cpu = ['host']
         self._qemu_arch = None
         self._qemu_args = [
             '-display', 'none',
@@ -54,6 +64,23 @@ class QEMURunner:
 
     def _can_use_kvm(self):
         return False
+
+    def _find_dtb(self):
+        if not self._dtb:
+            raise RuntimeError('No dtb set?')
+        if not self.kernel:
+            raise RuntimeError('Cannot locate dtb without kernel')
+
+        # If we are in a boot folder, look for them in the dts folder in it.
+        # Otherwise, assume there is a 'dtbs' folder in the same folder as the
+        # kernel image (tuxmake)
+        dtb_dir = 'dts' if self.kernel.parent.name == 'boot' else 'dtbs'
+        if not (dtb := Path(self.kernel.parent, dtb_dir, self._dtb)).exists():
+            raise FileNotFoundError(
+                f"dtb ('{self._dtb}') is required for booting but it could not be found at expected location ('{dtb}')",
+            )
+
+        return dtb
 
     def _get_default_smp_value(self):
         if not self.kernel_dir:
@@ -262,6 +289,8 @@ class QEMURunner:
             self.cmdline.append('nokaslr')
         if self.cmdline:
             self._qemu_args += ['-append', ' '.join(self.cmdline)]
+        if self._dtb:
+            self._qemu_args += ['-dtb', self._find_dtb()]
         self._qemu_args += ['-kernel', self.kernel]
         self._qemu_args += ['-initrd', self._prepare_initrd()]
 
@@ -269,7 +298,7 @@ class QEMURunner:
         if self.use_kvm:
             if not self.smp:
                 self.smp = self._get_default_smp_value()
-            self._qemu_args += ['-cpu', self._kvm_cpu, '-enable-kvm']
+            self._qemu_args += ['-cpu', ','.join(self._kvm_cpu), '-enable-kvm']
 
         # Machine specs
         self._qemu_args += ['-m', self._ram]
@@ -291,6 +320,73 @@ class QEMURunner:
 
     def supports_efi(self):
         return False
+
+
+class ARMQEMURunner(QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self._default_kernel_path = Path('arch/arm/boot/zImage')
+        self._initrd_arch = self._qemu_arch = 'arm'
+        self._machine = 'virt'
+
+    def run(self):
+        self._qemu_args += ['-machine', self._machine]
+
+        super().run()
+
+
+class ARMV5QEMURunner(ARMQEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self.cmdline.append('earlycon')
+
+        self._dtb = 'aspeed-bmc-opp-palmetto.dtb'
+        self._machine = 'palmetto-bmc'
+
+
+class ARMV6QEMURunner(ARMQEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self._dtb = 'aspeed-bmc-opp-romulus.dtb'
+        self._machine = 'romulus-bmc'
+
+
+class ARMV7QEMURunner(ARMQEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self.cmdline += ['console=ttyAMA0', 'earlycon']
+
+    def _can_use_kvm(self):
+        # 32-bit ARM KVM was ripped out in 5.7, so we do not bother checking
+        # for it here.
+        if platform.machine() != 'aarch64':
+            return False
+
+        # 32-bit EL1 is not supported on all cores so support for it must be
+        # explicitly queried via the KVM_CHECK_EXTENSION ioctl().
+        try:
+            subprocess.run(Path(BOOT_UTILS, 'utils',
+                                'aarch64_32_bit_el1_supported'),
+                           check=True)
+        except subprocess.CalledProcessError:
+            return False
+
+        return self._have_dev_kvm_access()
+
+    def run(self):
+        if self.use_kvm:
+            self._kvm_cpu.append('aarch64=off')
+            self._qemu_arch = 'aarch64'
+
+        super().run()
 
 
 class ARM64QEMURunner(QEMURunner):
@@ -498,6 +594,10 @@ if __name__ == '__main__':
     args = parse_arguments()
 
     arch_to_runner = {
+        'arm': ARMV7QEMURunner,
+        'arm32_v5': ARMV5QEMURunner,
+        'arm32_v6': ARMV6QEMURunner,
+        'arm32_v7': ARMV7QEMURunner,
         'arm64': ARM64QEMURunner,
         'arm64be': ARM64BEQEMURunner,
         'x86': X86QEMURunner,
