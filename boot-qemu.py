@@ -29,6 +29,7 @@ SUPPORTED_ARCHES = [
     'ppc64',
     'ppc64le',
     'riscv',
+    's390',
     'x86',
     'x86_64',
 ]
@@ -579,6 +580,17 @@ class RISCVQEMURunner(QEMURunner):
         self._qemu_args += ['-bios', bios, '-M', 'virt']
 
 
+class S390QEMURunner(QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self._default_kernel_path = Path('arch/s390/boot/bzImage')
+        self._initrd_arch = 's390'
+        self._qemu_arch = 's390x'
+        self._qemu_args += ['-M', 's390-ccw-virtio']
+
+
 class X86QEMURunner(QEMURunner):
 
     def __init__(self):
@@ -710,6 +722,7 @@ if __name__ == '__main__':
         'ppc64': PowerPC64QEMURunner,
         'ppc64le': PowerPC64LEQEMURunner,
         'riscv': RISCVQEMURunner,
+        's390': S390QEMURunner,
         'x86': X86QEMURunner,
         'x86_64': X8664QEMURunner,
     }
