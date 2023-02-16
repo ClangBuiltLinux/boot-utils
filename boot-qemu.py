@@ -24,6 +24,10 @@ SUPPORTED_ARCHES = [
     'arm64be',
     'mips',
     'mipsel',
+    'ppc32',
+    'ppc32_mac',
+    'ppc64',
+    'ppc64le',
     'x86',
     'x86_64',
 ]
@@ -496,6 +500,64 @@ class MIPSELQEMURunner(MIPSQEMURunner):
         self._initrd_arch = self._qemu_arch = 'mipsel'
 
 
+class PowerPC32QEMURunner(QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self.cmdline.append('console=ttyS0')
+        self._default_kernel_path = Path('arch/powerpc/boot/uImage')
+        self._initrd_arch = 'ppc32'
+        self._machine = 'bamboo'
+        self._qemu_arch = 'ppc'
+        self._ram = '128m'
+
+    def run(self):
+        self._qemu_args += ['-machine', self._machine]
+
+        super().run()
+
+
+class PowerPC32MacQEMURunner(PowerPC32QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self._default_kernel_path = Path('vmlinux')
+        self._machine = 'mac99'
+
+
+class PowerPC64QEMURunner(QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self._default_kernel_path = Path('vmlinux')
+        self._initrd_arch = self._qemu_arch = 'ppc64'
+        self._qemu_args += [
+            '-cpu', 'power8',
+            '-machine', 'pseries',
+            '-vga', 'none',
+        ]  # yapf: disable
+        self._ram = '1G'
+
+
+class PowerPC64LEQEMURunner(QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self._default_kernel_path = Path('arch/powerpc/boot/zImage.epapr')
+        self._initrd_arch = 'ppc64le'
+        self._qemu_arch = 'ppc64'
+        self._qemu_args += [
+            '-device', 'ipmi-bmc-sim,id=bmc0',
+            '-device', 'isa-ipmi-bt,bmc=bmc0,irq=10',
+            '-machine', 'powernv',
+        ]  # yapf: disable
+        self._ram = '2G'
+
+
 class X86QEMURunner(QEMURunner):
 
     def __init__(self):
@@ -622,6 +684,10 @@ if __name__ == '__main__':
         'arm64be': ARM64BEQEMURunner,
         'mips': MIPSQEMURunner,
         'mipsel': MIPSELQEMURunner,
+        'ppc32': PowerPC32QEMURunner,
+        'ppc32_mac': PowerPC32MacQEMURunner,
+        'ppc64': PowerPC64QEMURunner,
+        'ppc64le': PowerPC64LEQEMURunner,
         'x86': X86QEMURunner,
         'x86_64': X8664QEMURunner,
     }
