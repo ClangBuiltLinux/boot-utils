@@ -15,7 +15,7 @@ import sys
 import utils
 
 BOOT_UTILS = Path(__file__).resolve().parent
-SUPPORTED_ARCHES = ['x86', 'x86_64']
+SUPPORTED_ARCHES = ['arm64', 'arm64be', 'x86', 'x86_64']
 
 
 class QEMURunner:
@@ -83,6 +83,31 @@ class QEMURunner:
         usable_cpus = os.cpu_count()
         return min(usable_cpus, config_nr_cpus)
 
+    def _get_kernel_ver_tuple(self, decomp_prog):
+        if not self.kernel:
+            raise RuntimeError('No kernel set?')
+
+        utils.check_cmd(decomp_prog)
+        if decomp_prog in ('gzip', ):
+            decomp_cmd = [decomp_prog, '-c', '-d', self.kernel]
+        decomp = subprocess.run(decomp_cmd, capture_output=True, check=True)
+
+        utils.check_cmd('strings')
+        strings = subprocess.run('strings',
+                                 capture_output=True,
+                                 check=True,
+                                 input=decomp.stdout)
+        strings_stdout = strings.stdout.decode(encoding='utf-8',
+                                               errors='ignore')
+
+        if not (match := re.search(r'^Linux version (\d+\.\d+\.\d+)',
+                                   strings_stdout,
+                                   flags=re.M)):
+            raise RuntimeError(
+                f"Could not find Linux version in {self.kernel}?")
+
+        return tuple(int(x) for x in match.groups()[0].split('.'))
+
     def _get_qemu_ver_string(self):
         if not self._qemu_path:
             raise RuntimeError('No path to QEMU set?')
@@ -91,6 +116,13 @@ class QEMURunner:
                                   check=True,
                                   text=True)
         return qemu_ver.stdout.splitlines()[0]
+
+    def _get_qemu_ver_tuple(self):
+        qemu_ver_string = self._get_qemu_ver_string()
+        if not (match := re.search(r'version (\d+\.\d+.\d+)',
+                                   qemu_ver_string)):
+            raise RuntimeError('Could not find QEMU version?')
+        return tuple(int(x) for x in match.groups()[0].split('.'))
 
     def _have_dev_kvm_access(self):
         return os.access('/dev/kvm', os.R_OK | os.W_OK)
@@ -167,8 +199,38 @@ class QEMURunner:
             if answer.lower() == 'n':
                 break
 
-    def run(self):
-        # Make sure QEMU binary is configured and available
+    def _set_kernel_vars(self):
+        if self.kernel:
+            if not self.kernel_dir:
+                self.kernel_dir = self.kernel.parent
+            # Nothing else to do, kernel image and build folder located and set
+            return
+
+        if not self.kernel_dir:
+            raise RuntimeError(
+                'No kernel image or kernel build folder specified?')
+        if not self._default_kernel_path:
+            raise RuntimeError('No default kernel path specified?')
+
+        possible_kernel_locations = {
+            Path(self.kernel_dir,
+                 self._default_kernel_path),  # default (kbuild)
+            Path(self.kernel_dir, self._default_kernel_path.name),  # tuxmake
+        }
+        for loc in possible_kernel_locations:
+            if loc.exists():
+                self.kernel = loc
+                break
+        if not self.kernel:
+            possible_locations = "', '".join(
+                str(path) for path in possible_kernel_locations)
+            raise FileNotFoundError(
+                f"{self._default_kernel_path.name} could not be found at possible locations ('{possible_locations}')",
+            )
+
+    def _set_qemu_path(self):
+        if self._qemu_path:
+            return  # already found and set
         if not self._qemu_arch:
             raise RuntimeError('No QEMU architecture set?')
         qemu_bin = f"qemu-system-{self._qemu_arch}"
@@ -177,33 +239,12 @@ class QEMURunner:
                 f'{qemu_bin} could not be found on your system?')
         self._qemu_path = Path(qemu_path)
 
-        # Locate kernel if it was not specified
-        if self.kernel:
-            if not self.kernel_dir:
-                self.kernel_dir = self.kernel.parent
-        else:
-            if not self.kernel_dir:
-                raise RuntimeError(
-                    'No kernel image or kernel build folder specified?')
-            if not self._default_kernel_path:
-                raise RuntimeError('No default kernel path specified?')
+    def run(self):
+        # Make sure QEMU binary is configured and available
+        self._set_qemu_path()
 
-            possible_kernel_locations = {
-                Path(self.kernel_dir,
-                     self._default_kernel_path),  # default (kbuild)
-                Path(self.kernel_dir,
-                     self._default_kernel_path.name),  # tuxmake
-            }
-            for loc in possible_kernel_locations:
-                if loc.exists():
-                    self.kernel = loc
-                    break
-            if not self.kernel:
-                possible_locations = "', '".join(
-                    str(path) for path in possible_kernel_locations)
-                raise FileNotFoundError(
-                    f"{self._default_kernel_path.name} could not be found at possible locations ('{possible_locations}')",
-                )
+        # Locate kernel (may be done earlier in subclasses)
+        self._set_kernel_vars()
 
         # EFI:
         if self.efi:
@@ -247,6 +288,93 @@ class QEMURunner:
             self._qemu_args += ['-serial', 'mon:stdio']
 
             self._run_fg()
+
+    def supports_efi(self):
+        return False
+
+
+class ARM64QEMURunner(QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self.cmdline += ['console=ttyAMA0', 'earlycon']
+
+        self._default_kernel_path = Path('arch/arm64/boot/Image.gz')
+        self._initrd_arch = 'arm64'
+        self._qemu_arch = 'aarch64'
+
+    def _can_use_kvm(self):
+        return platform.machine() == 'aarch64' and self._have_dev_kvm_access()
+
+    def run(self):
+        machine = ['virt', 'gic-version=max']
+
+        if not self.use_kvm:
+            cpu = ['max']
+
+            self._set_qemu_path()
+            if (qemu_ver := self._get_qemu_ver_tuple()) >= (6, 2, 50):
+                self._set_kernel_vars()
+                kernel_ver = self._get_kernel_ver_tuple('gzip')
+
+                # https://gitlab.com/qemu-project/qemu/-/issues/964
+                if kernel_ver < (4, 16, 0):
+                    cpu = ['cortex-a72']
+                # https://gitlab.com/qemu-project/qemu/-/commit/69b2265d5fe8e0f401d75e175e0a243a7d505e53
+                elif kernel_ver < (5, 12, 0):
+                    cpu.append('lpa2=off')
+
+            # https://lore.kernel.org/YlgVa+AP0g4IYvzN@lakrids/
+            if 'max' in cpu and qemu_ver >= (6, 0, 0):
+                cpu.append('pauth-impdef=true')
+
+            self._qemu_args += ['-cpu', ','.join(cpu)]
+
+            # Boot with VHE emulation, which allows the kernel to run at EL2.
+            # KVM does not emulate VHE, so this cannot be unconditional.
+            machine.append('virtualization=true')
+
+        self._qemu_args += ['-machine', ','.join(machine)]
+
+        if self.efi:
+            # Sizing the images to 64M is recommended by "Prepare the firmware" section at
+            # https://mirrors.edge.kernel.org/pub/linux/kernel/people/will/docs/qemu/qemu-arm64-howto.html
+            efi_img_size = 64 * 1024 * 1024  # 64M
+
+            usr_share = Path('/usr/share')
+
+            aavmf_locations = [
+                Path('edk2/aarch64/QEMU_EFI.silent.fd'),  # Fedora
+                Path('edk2/aarch64/QEMU_EFI.fd'),  # Arch Linux (current)
+                Path('edk2-armvirt/aarch64/QEMU_EFI.fd'),  # Arch Linux (old)
+                Path('qemu-efi-aarch64/QEMU_EFI.fd'),  # Debian and Ubuntu
+            ]
+            aavmf = utils.find_first_file(usr_share, aavmf_locations)
+
+            self._efi_img = Path(BOOT_UTILS, 'images', self._initrd_arch,
+                                 'efi.img')
+            shutil.copyfile(aavmf, self._efi_img)
+            with self._efi_img.open(mode='r+b') as file:
+                file.truncate(efi_img_size)
+
+            self._efi_vars = self._efi_img.with_stem('efivars')
+            self._efi_vars.unlink(missing_ok=True)
+            with self._efi_vars.open(mode='xb') as file:
+                file.truncate(efi_img_size)
+
+        super().run()
+
+    def supports_efi(self):
+        return True
+
+
+class ARM64BEQEMURunner(ARM64QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self._initrd_arch = 'arm64be'
 
     def supports_efi(self):
         return False
@@ -370,6 +498,8 @@ if __name__ == '__main__':
     args = parse_arguments()
 
     arch_to_runner = {
+        'arm64': ARM64QEMURunner,
+        'arm64be': ARM64BEQEMURunner,
         'x86': X86QEMURunner,
         'x86_64': X8664QEMURunner,
     }
