@@ -22,6 +22,7 @@ SUPPORTED_ARCHES = [
     'arm32_v7',
     'arm64',
     'arm64be',
+    'm68k',
     'mips',
     'mipsel',
     'ppc32',
@@ -484,6 +485,17 @@ class ARM64BEQEMURunner(ARM64QEMURunner):
         return False
 
 
+class M68KQEMURunner(QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self.cmdline.append('console=ttyS0,115200')
+        self._default_kernel_path = Path('vmlinux')
+        self._initrd_arch = self._qemu_arch = 'm68k'
+        self._qemu_args += ['-cpu', 'm68040', '-M', 'q800']
+
+
 class MIPSQEMURunner(QEMURunner):
 
     def __init__(self):
@@ -715,6 +727,7 @@ if __name__ == '__main__':
         'arm32_v7': ARMV7QEMURunner,
         'arm64': ARM64QEMURunner,
         'arm64be': ARM64BEQEMURunner,
+        'm68k': M68KQEMURunner,
         'mips': MIPSQEMURunner,
         'mipsel': MIPSELQEMURunner,
         'ppc32': PowerPC32QEMURunner,
