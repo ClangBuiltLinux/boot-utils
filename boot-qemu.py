@@ -2,6 +2,7 @@
 # pylint: disable=invalid-name
 
 import argparse
+import contextlib
 import os
 from pathlib import Path
 import platform
@@ -785,11 +786,9 @@ def launch_qemu(cfg):
                 gdb_cmd += [kernel_location.joinpath("vmlinux")]
                 gdb_cmd += ["-ex", "target remote :1234"]
 
-                with subprocess.Popen(gdb_cmd) as gdb_process:
-                    try:
-                        gdb_process.wait()
-                    except KeyboardInterrupt:
-                        pass
+                with subprocess.Popen(gdb_cmd) as gdb_process, \
+                     contextlib.suppress(KeyboardInterrupt):
+                    gdb_process.wait()
 
                 utils.red("Killing QEMU...")
                 qemu_process.kill()
