@@ -2,6 +2,7 @@
 # pylint: disable=invalid-name
 
 from argparse import ArgumentParser
+import contextlib
 import os
 from pathlib import Path
 import platform
@@ -24,6 +25,8 @@ class QEMURunner:
         # Properties that can be adjusted by the user or class
         self.cmdline = []
         self.efi = False
+        self.gdb = False
+        self.gdb_bin = ''
         self.interactive = False
         self.kernel = None
         self.kernel_dir = None
@@ -45,7 +48,6 @@ class QEMURunner:
             '-display', 'none',
             '-nodefaults',
             '-no-reboot',
-            '-serial', 'mon:stdio',
         ]  # yapf: disable
         self._qemu_path = None
         self._ram = '512m'
@@ -107,6 +109,64 @@ class QEMURunner:
 
         return dst
 
+    def _run_fg(self):
+        # Pretty print and run QEMU command
+        qemu_cmd = []
+
+        if not self.interactive:
+            utils.check_cmd('timeout')
+            qemu_cmd += ['timeout', '--foreground', self.timeout]
+
+            utils.check_cmd('stdbuf')
+            qemu_cmd += ['stdbuf', '-eL', '-oL']
+
+        qemu_cmd += [self._qemu_path, *self._qemu_args]
+
+        print(f"$ {' '.join(shlex.quote(str(elem)) for elem in qemu_cmd)}")
+        try:
+            subprocess.run(qemu_cmd, check=True)
+        except subprocess.CalledProcessError as err:
+            if err.returncode == 124:
+                utils.red("ERROR: QEMU timed out!")
+            else:
+                utils.red("ERROR: QEMU did not exit cleanly!")
+            sys.exit(err.returncode)
+
+    def _run_gdb(self):
+        qemu_cmd = [self._qemu_path, *self._qemu_args]
+
+        utils.check_cmd(self.gdb_bin)
+        utils.check_cmd('lsof')
+
+        gdb_cmd = [
+            self.gdb_bin,
+            Path(self.kernel_dir, 'vmlinux'),
+            '-ex',
+            'target remote :1234',
+        ]
+
+        while True:
+            lsof = subprocess.run(['lsof', '-i:1234'],
+                                  capture_output=True,
+                                  check=False)
+            if lsof.returncode == 0:
+                utils.die('Port 1234 is already in use, is QEMU running?')
+
+            utils.green('Starting QEMU with gdb connection on port 1234...')
+            with subprocess.Popen(qemu_cmd,
+                                  preexec_fn=os.setpgrp) as qemu_proc:
+                utils.green(f"Starting {self.gdb_bin}...")
+                with subprocess.Popen(gdb_cmd) as gdb_proc, \
+                     contextlib.suppress(KeyboardInterrupt):
+                    gdb_proc.wait()
+
+                utils.red('Killing QEMU...')
+                qemu_proc.kill()
+
+            answer = input('Re-run QEMU + gdb [y/n] ')
+            if answer.lower() == 'n':
+                break
+
     def run(self):
         # Make sure QEMU binary is configured and available
         if not self._qemu_arch:
@@ -157,6 +217,8 @@ class QEMURunner:
         # Kernel options
         if self.interactive:
             self.cmdline.append('rdinit=/bin/sh')
+        if self.gdb:
+            self.cmdline.append('nokaslr')
         if self.cmdline:
             self._qemu_args += ['-append', ' '.join(self.cmdline)]
         self._qemu_args += ['-kernel', self.kernel]
@@ -177,27 +239,14 @@ class QEMURunner:
         utils.green(f"QEMU location: \033[0m{self._qemu_path.parent}")
         utils.green(f"QEMU version: \033[0m{self._get_qemu_ver_string()}")
 
-        # Pretty print and run QEMU command
-        qemu_cmd = []
+        if self.gdb:
+            self._qemu_args += ['-s', '-S']
 
-        if not self.interactive:
-            utils.check_cmd('timeout')
-            qemu_cmd += ['timeout', '--foreground', self.timeout]
+            self._run_gdb()
+        else:
+            self._qemu_args += ['-serial', 'mon:stdio']
 
-            utils.check_cmd('stdbuf')
-            qemu_cmd += ['stdbuf', '-eL', '-oL']
-
-        qemu_cmd += [qemu_path, *self._qemu_args]
-
-        print(f"$ {' '.join(shlex.quote(str(elem)) for elem in qemu_cmd)}")
-        try:
-            subprocess.run(qemu_cmd, check=True)
-        except subprocess.CalledProcessError as err:
-            if err.returncode == 124:
-                utils.red("ERROR: QEMU timed out!")
-            else:
-                utils.red("ERROR: QEMU did not exit cleanly!")
-            sys.exit(err.returncode)
+            self._run_fg()
 
     def supports_efi(self):
         return False
@@ -276,6 +325,15 @@ def parse_arguments():
                         action='store_true',
                         help='Boot kernel via UEFI (x86_64 only)')
     parser.add_argument(
+        '-g',
+        '--gdb',
+        action='store_true',
+        help="Start QEMU with '-s -S' then launch gdb on 'vmlinux'")
+    parser.add_argument(
+        '--gdb-bin',
+        default='gdb-multiarch',
+        help='gdb binary to use for debugging (default: gdb-multiarch)')
+    parser.add_argument(
         '-k',
         '--kernel-location',
         required=True,
@@ -321,6 +379,10 @@ if __name__ == '__main__':
         raise FileNotFoundError(
             f"Supplied kernel location ('{kernel_location}') does not exist!")
     if kernel_location.is_file():
+        if args.gdb and kernel_location.name != 'vmlinux':
+            raise RuntimeError(
+                'Debugging with gdb requires a kernel build folder to locate vmlinux',
+            )
         runner.kernel = kernel_location
     else:
         runner.kernel_dir = kernel_location
@@ -335,13 +397,17 @@ if __name__ == '__main__':
                 f"EFI boot requested on unsupported architecture ('{args.architecture}'), ignoring...",
             )
 
+    if args.gdb:
+        runner.gdb = True
+        runner.gdb_bin = args.gdb_bin
+
     if args.no_kvm:
         runner.use_kvm = False
 
     if args.smp:
         runner.smp = args.smp
 
-    runner.interactive = args.interactive
+    runner.interactive = args.interactive or args.gdb
     runner.timeout = args.timeout
 
     runner.run()
