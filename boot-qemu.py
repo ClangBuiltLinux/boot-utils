@@ -694,7 +694,7 @@ def get_qemu_args(cfg):
     # with subprocess.Popen()
     qemu = shutil.which(qemu)
 
-    cfg["qemu_cmd"] = [qemu] + qemu_args
+    cfg["qemu_cmd"] = [qemu, *qemu_args]
 
     return cfg
 
