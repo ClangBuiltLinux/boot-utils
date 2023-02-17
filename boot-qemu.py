@@ -22,6 +22,8 @@ SUPPORTED_ARCHES = [
     'arm32_v7',
     'arm64',
     'arm64be',
+    'mips',
+    'mipsel',
     'x86',
     'x86_64',
 ]
@@ -476,6 +478,24 @@ class ARM64BEQEMURunner(ARM64QEMURunner):
         return False
 
 
+class MIPSQEMURunner(QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self._default_kernel_path = Path('vmlinux')
+        self._initrd_arch = self._qemu_arch = 'mips'
+        self._qemu_args += ['-cpu', '24Kf', '-machine', 'malta']
+
+
+class MIPSELQEMURunner(MIPSQEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self._initrd_arch = self._qemu_arch = 'mipsel'
+
+
 class X86QEMURunner(QEMURunner):
 
     def __init__(self):
@@ -600,6 +620,8 @@ if __name__ == '__main__':
         'arm32_v7': ARMV7QEMURunner,
         'arm64': ARM64QEMURunner,
         'arm64be': ARM64BEQEMURunner,
+        'mips': MIPSQEMURunner,
+        'mipsel': MIPSELQEMURunner,
         'x86': X86QEMURunner,
         'x86_64': X8664QEMURunner,
     }
