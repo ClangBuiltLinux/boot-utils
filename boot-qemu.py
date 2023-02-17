@@ -23,6 +23,7 @@ class QEMURunner:
 
         # Properties that can be adjusted by the user or class
         self.cmdline = []
+        self.efi = False
         self.interactive = False
         self.kernel = None
         self.kernel_dir = None
@@ -35,6 +36,8 @@ class QEMURunner:
         self.timeout = ''
 
         self._default_kernel_path = None
+        self._efi_img = None
+        self._efi_vars = None
         self._initrd_arch = None
         self._kvm_cpu = 'host'
         self._qemu_arch = None
@@ -142,6 +145,15 @@ class QEMURunner:
                     f"{self._default_kernel_path.name} could not be found at possible locations ('{possible_locations}')",
                 )
 
+        # EFI:
+        if self.efi:
+            self._qemu_args += [
+                '-drive', f"if=pflash,format=raw,file={self._efi_img},readonly=on",
+                '-drive', f"if=pflash,format=raw,file={self._efi_vars}",
+                '-object', 'rng-random,filename=/dev/urandom,id=rng0',
+                '-device', 'virtio-rng-pci',
+            ]  # yapf: disable
+
         # Kernel options
         if self.interactive:
             self.cmdline.append('rdinit=/bin/sh')
@@ -187,6 +199,9 @@ class QEMURunner:
                 utils.red("ERROR: QEMU did not exit cleanly!")
             sys.exit(err.returncode)
 
+    def supports_efi(self):
+        return False
+
 
 class X86QEMURunner(QEMURunner):
 
@@ -203,7 +218,10 @@ class X86QEMURunner(QEMURunner):
         return platform.machine() == 'x86_64' and self._have_dev_kvm_access()
 
     def run(self):
-        if self.use_kvm:
+        if self.use_kvm and not self.efi:
+            # There are a lot of messages along the line of
+            # "Invalid read at addr 0xFED40000, size 1, region '(null)', reason: rejected"
+            # with EFI, so do not bother.
             self._qemu_args += ['-d', 'unimp,guest_errors']
 
         super().run()
@@ -216,9 +234,30 @@ class X8664QEMURunner(X86QEMURunner):
 
         self._initrd_arch = self._qemu_arch = 'x86_64'
 
+    def supports_efi(self):
+        return True
+
     def run(self):
         if not self.use_kvm:
             self._qemu_args += ['-cpu', 'Nehalem']
+
+        if self.efi:
+            usr_share = Path('/usr/share')
+            ovmf_locations = [
+                Path('edk2/x64/OVMF_CODE.fd'),  # Arch Linux (current), Fedora
+                Path('edk2-ovmf/x64/OVMF_CODE.fd'),  # Arch Linux (old)
+                Path('OVMF/OVMF_CODE.fd'),  # Debian and Ubuntu
+            ]
+            self._efi_img = utils.find_first_file(usr_share, ovmf_locations)
+
+            ovmf_vars_locations = [
+                Path('edk2/x64/OVMF_VARS.fd'),  # Arch Linux and Fedora
+                Path('OVMF/OVMF_VARS.fd'),  # Debian and Ubuntu
+            ]
+            ovmf_vars = utils.find_first_file(usr_share, ovmf_vars_locations)
+            self._efi_vars = Path(BOOT_UTILS, 'images', self.initrd_arch,
+                                  ovmf_vars.name)
+            shutil.copyfile(ovmf_vars, self._efi_vars)
 
         super().run()
 
@@ -233,6 +272,9 @@ def parse_arguments():
         help='The architecture to boot. Possible values are: %(choices)s',
         metavar='ARCH',
         required=True)
+    parser.add_argument('--efi',
+                        action='store_true',
+                        help='Boot kernel via UEFI (x86_64 only)')
     parser.add_argument(
         '-k',
         '--kernel-location',
@@ -285,6 +327,13 @@ if __name__ == '__main__':
 
     if args.append:
         runner.cmdline += args.append
+
+    if args.efi:
+        runner.efi = runner.supports_efi()
+        if not runner.efi:
+            utils.yellow(
+                f"EFI boot requested on unsupported architecture ('{args.architecture}'), ignoring...",
+            )
 
     if args.no_kvm:
         runner.use_kvm = False
