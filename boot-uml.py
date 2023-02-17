@@ -24,7 +24,7 @@ def parse_arguments():
         "--interactive",
         action="store_true",
         help=
-        "Instead of immediately shutting down upon successful boot, pass 'init=/bin/sh' to the UML executable to allow interacting with UML via a shell."
+        "Instead of immediately shutting down upon successful boot, pass 'init=/bin/sh' to the UML executable to allow interacting with UML via a shell.",
     )
     parser.add_argument(
         "-k",
@@ -32,7 +32,7 @@ def parse_arguments():
         required=True,
         type=str,
         help=
-        "Path to UML executable ('linux') or kernel build folder to search for executable in. Can be an absolute or relative path."
+        "Path to UML executable ('linux') or kernel build folder to search for executable in. Can be an absolute or relative path.",
     )
 
     return parser.parse_args()
