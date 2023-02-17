@@ -633,10 +633,7 @@ def get_qemu_args(cfg):
         elif arch == "x86_64":
             qemu_args += ["-cpu", "Nehalem"]
 
-        if arch == "x86":
-            qemu = "qemu-system-i386"
-        else:
-            qemu = "qemu-system-x86_64"
+        qemu = "qemu-system-i386" if arch == "x86" else "qemu-system-x86_64"
 
     # Make sure QEMU is available in PATH, otherwise there is little point to
     # continuing.
@@ -650,13 +647,10 @@ def get_qemu_args(cfg):
 
     # '-dtb'
     if dtb:
-        # If we are in a boot folder, look for them in the dts folder in it
-        if "boot" in str(kernel):
-            dtb_dir = "dts"
+        # If we are in a boot folder, look for them in the dts folder in it.
         # Otherwise, assume there is a dtbs folder in the same folder as the
         # kernel image (tuxmake)
-        else:
-            dtb_dir = "dtbs"
+        dtb_dir = "dts" if "boot" in str(kernel) else "dtbs"
 
         dtb = kernel.parent.joinpath(dtb_dir, dtb)
         if not dtb.exists():
