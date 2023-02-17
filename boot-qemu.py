@@ -395,13 +395,11 @@ def get_efi_args(guest_arch):
             Path("edk2/aarch64/QEMU_EFI.fd"),  # Arch Linux (current)
             Path("edk2-armvirt/aarch64/QEMU_EFI.fd"),  # Arch Linux (old)
             Path("qemu-efi-aarch64/QEMU_EFI.fd"),  # Debian and Ubuntu
-            None,  # Terminator
         ],
         "x86_64": [
             Path("edk2/x64/OVMF_CODE.fd"),  # Arch Linux (current), Fedora
             Path("edk2-ovmf/x64/OVMF_CODE.fd"),  # Arch Linux (old)
             Path("OVMF/OVMF_CODE.fd"),  # Debian and Ubuntu
-            None,  # Terminator
         ],
     }  # yapf: disable
 
@@ -411,13 +409,8 @@ def get_efi_args(guest_arch):
         )
         return []
 
-    for efi_img_location in efi_img_locations[guest_arch]:
-        if efi_img_location is None:
-            raise FileNotFoundError(
-                f"edk2 could not be found for {guest_arch}!")
-        efi_img = Path("/usr/share", efi_img_location)
-        if efi_img.exists():
-            break
+    usr_share = Path('/usr/share')
+    efi_img = utils.find_first_file(usr_share, efi_img_locations[guest_arch])
 
     if guest_arch == "arm64":
         # Sizing the images to 64M is recommended by "Prepare the firmware" section at
@@ -442,15 +435,8 @@ def get_efi_args(guest_arch):
         efi_vars_locations = [
             Path("edk2/x64/OVMF_VARS.fd"),  # Arch Linux and Fedora
             Path("OVMF/OVMF_VARS.fd"),  # Debian and Ubuntu
-            None,  # Terminator
         ]
-        for efi_vars_location in efi_vars_locations:
-            if efi_vars_location is None:
-                raise FileNotFoundError("OVMF_VARS.fd could not be found!")
-            efi_vars = Path('/usr/share', efi_vars_location)
-            if efi_vars.exists():
-                break
-
+        efi_vars = utils.find_first_file(usr_share, efi_vars_locations)
         efi_vars_qemu = base_folder.joinpath("images", guest_arch,
                                              efi_vars.name)
         shutil.copyfile(efi_vars, efi_vars_qemu)

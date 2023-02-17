@@ -30,6 +30,34 @@ def die(string):
     sys.exit(1)
 
 
+def find_first_file(relative_root, possible_files, required=True):
+    """
+    Attempts to find the first option available in the list of files relative
+    to a specified root folder.
+
+    Parameters:
+        relative_root (Path): A Path object containing the folder to search for
+                              files within.
+        possible_files (list): A list of Paths that may be within the relative
+                               root folder. They will be automatically appended
+                               to relative_root.
+        required (bool): Whether or not the file is required, which determines
+                         if not finding the file is an error.
+    Returns:
+        The full path to the first file found in the list. If none could be
+        found, an Exception is raised.
+    """
+    for possible_file in possible_files:
+        if (full_path := relative_root.joinpath(possible_file)).exists():
+            return full_path
+    if required:
+        files_str = "', '".join([str(elem) for elem in possible_files])
+        raise FileNotFoundError(
+            f"No files from list ('{files_str}') could be found within '{relative_root}'!",
+        )
+    return None
+
+
 def get_full_kernel_path(kernel_location, image, arch=None):
     """
     Get the full path to a kernel image based on the architecture and image
