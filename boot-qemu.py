@@ -251,6 +251,13 @@ def parse_arguments():
         '--shell',
         action='store_true',
         help='Instead of immediately shutting down machine, spawn a shell.')
+    parser.add_argument(
+        '-s',
+        '--smp',
+        type=int,
+        help=
+        'Number of processors for virtual machine (default: only KVM machines will use multiple vCPUs.)',
+    )
     parser.add_argument('-t',
                         '--timeout',
                         default='3m',
@@ -281,6 +288,9 @@ if __name__ == '__main__':
 
     if args.no_kvm:
         runner.use_kvm = False
+
+    if args.smp:
+        runner.smp = args.smp
 
     runner.interactive = args.interactive
     runner.timeout = args.timeout
