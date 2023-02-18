@@ -48,6 +48,7 @@ class QEMURunner:
         self.gh_json_file = None
         self.interactive = False
         self.kernel = None
+        self.kernel_config = None
         self.kernel_dir = None
         self.memory = '512m'
         self.supports_efi = False
@@ -91,32 +92,39 @@ class QEMURunner:
         )
 
     def _get_default_smp_value(self):
-        if not self.kernel_dir:
-            raise RuntimeError('No kernel build folder specified?')
-
-        # If kernel_dir is the kernel source, the configuration will be at
-        # <kernel_dir>/.config
-        #
-        # If kernel_dir is the direct parent to the full kernel image, the
-        # configuration could either be:
-        #   * <kernel_dir>/.config (if the image is vmlinux)
-        #   * <kernel_dir>/../../../.config (if the image is in arch/*/boot/)
-        #   * <kernel_dir>/config (if the image is in a TuxMake folder)
-        possible_locations = ['.config', '../../../.config', 'config']
-        configuration = utils.find_first_file(self.kernel_dir,
-                                              possible_locations,
-                                              required=False)
-
-        config_nr_cpus = 8  # sensible default based on treewide defaults,
-        if configuration:
-            conf_txt = configuration.read_text(encoding='utf-8')
-            if (match := re.search(r'CONFIG_NR_CPUS=(\d+)', conf_txt)):
-                config_nr_cpus = int(match.groups()[0])
-
         # Use the minimum of the number of usable processers for the script or
         # CONFIG_NR_CPUS.
+        config_nr_cpus_default = 8  # sensible default based on treewide defaults,
+        config_nr_cpus = int(
+            self._get_kernel_config_val('CONFIG_NR_CPUS',
+                                        config_nr_cpus_default))
         usable_cpus = os.cpu_count()
         return min(usable_cpus, config_nr_cpus)
+
+    def _get_kernel_config_val(self, config, default='n'):
+        if not self.kernel_config:
+            if not self.kernel_dir:
+                raise RuntimeError('No kernel build folder specified?')
+
+            # If kernel_dir is the kernel source, the configuration will be at
+            # <kernel_dir>/.config
+            #
+            # If kernel_dir is the direct parent to the full kernel image, the
+            # configuration could either be:
+            #   * <kernel_dir>/.config (if the image is vmlinux)
+            #   * <kernel_dir>/../../../.config (if the image is in arch/*/boot/)
+            #   * <kernel_dir>/config (if the image is in a TuxMake folder)
+            possible_locations = ['.config', '../../../.config', 'config']
+            self.kernel_config = utils.find_first_file(self.kernel_dir,
+                                                       possible_locations,
+                                                       required=False)
+
+        if self.kernel_config:
+            conf_txt = self.kernel_config.read_text(encoding='utf-8')
+            if (match := re.search(fr'^{config}=(.*)$', conf_txt, flags=re.M)):
+                return match.groups()[0]
+
+        return default
 
     def _get_kernel_ver_tuple(self, decomp_prog):
         if not self.kernel:
