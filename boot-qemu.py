@@ -2,6 +2,7 @@
 # pylint: disable=invalid-name
 
 import argparse
+import contextlib
 import os
 from pathlib import Path
 import platform
@@ -14,9 +15,23 @@ import utils
 
 base_folder = Path(__file__).resolve().parent
 supported_architectures = [
-    "arm", "arm32_v5", "arm32_v6", "arm32_v7", "arm64", "arm64be", "m68k",
-    "mips", "mipsel", "ppc32", "ppc32_mac", "ppc64", "ppc64le", "riscv",
-    "s390", "x86", "x86_64"
+    "arm",
+    "arm32_v5",
+    "arm32_v6",
+    "arm32_v7",
+    "arm64",
+    "arm64be",
+    "m68k",
+    "mips",
+    "mipsel",
+    "ppc32",
+    "ppc32_mac",
+    "ppc64",
+    "ppc64le",
+    "riscv",
+    "s390",
+    "x86",
+    "x86_64",
 ]
 
 
@@ -59,29 +74,29 @@ def parse_arguments():
         "--interactive",
         "--shell",
         action="store_true",
-        help=  # noqa: E251
-        "Instead of immediately shutting down the machine upon successful boot, pass 'rdinit=/bin/sh' on the kernel command line to allow interacting with the machine via a shell."
+        help=
+        "Instead of immediately shutting down the machine upon successful boot, pass 'rdinit=/bin/sh' on the kernel command line to allow interacting with the machine via a shell.",
     )
     parser.add_argument(
         "-k",
         "--kernel-location",
         required=True,
         type=str,
-        help=  # noqa: E251
-        "Path to kernel image or kernel build folder to search for image in. Can be an absolute or relative path."
+        help=
+        "Path to kernel image or kernel build folder to search for image in. Can be an absolute or relative path.",
     )
     parser.add_argument(
         "--no-kvm",
         action="store_true",
-        help=  # noqa: E251
-        "Do not use KVM for acceleration even when supported (only recommended for debugging)."
+        help=
+        "Do not use KVM for acceleration even when supported (only recommended for debugging).",
     )
     parser.add_argument(
         "-s",
         "--smp",
         type=int,
-        help=  # noqa: E251
-        "Number of processors for virtual machine. By default, only machines spawned with KVM will use multiple vCPUS."
+        help=
+        "Number of processors for virtual machine. By default, only machines spawned with KVM will use multiple vCPUS.",
     )
     parser.add_argument(
         "-t",
@@ -194,7 +209,7 @@ def get_smp_value(args):
     # CONFIG_NR_CPUS then get the actual value if possible.
     config_nr_cpus = 8
     if config_file:
-        with open(config_file, encoding='utf-8') as file:
+        with config_file.open(encoding='utf-8') as file:
             for line in file:
                 if "CONFIG_NR_CPUS=" in line:
                     config_nr_cpus = int(line.split("=", 1)[1])
@@ -380,19 +395,19 @@ def get_efi_args(guest_arch):
             Path("edk2/aarch64/QEMU_EFI.fd"),  # Arch Linux (current)
             Path("edk2-armvirt/aarch64/QEMU_EFI.fd"),  # Arch Linux (old)
             Path("qemu-efi-aarch64/QEMU_EFI.fd"),  # Debian and Ubuntu
-            None  # Terminator
+            None,  # Terminator
         ],
         "x86_64": [
             Path("edk2/x64/OVMF_CODE.fd"),  # Arch Linux (current), Fedora
             Path("edk2-ovmf/x64/OVMF_CODE.fd"),  # Arch Linux (old)
             Path("OVMF/OVMF_CODE.fd"),  # Debian and Ubuntu
-            None  # Terminator
-        ]
+            None,  # Terminator
+        ],
     }  # yapf: disable
 
     if guest_arch not in efi_img_locations:
         utils.yellow(
-            f"EFI boot requested for unsupported architecture ('{guest_arch}'), ignoring..."
+            f"EFI boot requested for unsupported architecture ('{guest_arch}'), ignoring...",
         )
         return []
 
@@ -427,7 +442,7 @@ def get_efi_args(guest_arch):
         efi_vars_locations = [
             Path("edk2/x64/OVMF_VARS.fd"),  # Arch Linux and Fedora
             Path("OVMF/OVMF_VARS.fd"),  # Debian and Ubuntu
-            None  # Terminator
+            None,  # Terminator
         ]
         for efi_vars_location in efi_vars_locations:
             if efi_vars_location is None:
@@ -446,7 +461,7 @@ def get_efi_args(guest_arch):
         "-drive", f"if=pflash,format=raw,file={efi_img_qemu},readonly=on",
         "-drive", f"if=pflash,format=raw,file={efi_vars_qemu}",
         "-object", "rng-random,filename=/dev/urandom,id=rng0",
-        "-device", "virtio-rng-pci"
+        "-device", "virtio-rng-pci",
     ]  # yapf: disable
 
 
@@ -619,10 +634,7 @@ def get_qemu_args(cfg):
         elif arch == "x86_64":
             qemu_args += ["-cpu", "Nehalem"]
 
-        if arch == "x86":
-            qemu = "qemu-system-i386"
-        else:
-            qemu = "qemu-system-x86_64"
+        qemu = "qemu-system-i386" if arch == "x86" else "qemu-system-x86_64"
 
     # Make sure QEMU is available in PATH, otherwise there is little point to
     # continuing.
@@ -636,18 +648,15 @@ def get_qemu_args(cfg):
 
     # '-dtb'
     if dtb:
-        # If we are in a boot folder, look for them in the dts folder in it
-        if "boot" in str(kernel):
-            dtb_dir = "dts"
+        # If we are in a boot folder, look for them in the dts folder in it.
         # Otherwise, assume there is a dtbs folder in the same folder as the
         # kernel image (tuxmake)
-        else:
-            dtb_dir = "dtbs"
+        dtb_dir = "dts" if "boot" in str(kernel) else "dtbs"
 
         dtb = kernel.parent.joinpath(dtb_dir, dtb)
         if not dtb.exists():
             utils.die(
-                f"'{dtb.stem}' is required for booting but it could not be found at '{dtb}'"
+                f"'{dtb.stem}' is required for booting but it could not be found at '{dtb}'",
             )
 
         qemu_args += ["-dtb", dtb]
@@ -686,7 +695,7 @@ def get_qemu_args(cfg):
     # with subprocess.Popen()
     qemu = shutil.which(qemu)
 
-    cfg["qemu_cmd"] = [qemu] + qemu_args
+    cfg["qemu_cmd"] = [qemu, *qemu_args]
 
     return cfg
 
@@ -777,11 +786,9 @@ def launch_qemu(cfg):
                 gdb_cmd += [kernel_location.joinpath("vmlinux")]
                 gdb_cmd += ["-ex", "target remote :1234"]
 
-                with subprocess.Popen(gdb_cmd) as gdb_process:
-                    try:
-                        gdb_process.wait()
-                    except KeyboardInterrupt:
-                        pass
+                with subprocess.Popen(gdb_cmd) as gdb_process, \
+                     contextlib.suppress(KeyboardInterrupt):
+                    gdb_process.wait()
 
                 utils.red("Killing QEMU...")
                 qemu_process.kill()
