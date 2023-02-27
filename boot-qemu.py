@@ -9,6 +9,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 
 import utils
 
@@ -22,6 +23,7 @@ class QEMURunner:
 
         # Properties that can be adjusted by the user or class
         self.cmdline = []
+        self.interactive = False
         self.kernel = None
         self.kernel_dir = None
         # It may be tempting to use self.use_kvm during initialization of
@@ -30,6 +32,7 @@ class QEMURunner:
         # be confined to run().
         self.use_kvm = self._can_use_kvm()
         self.smp = 0
+        self.timeout = ''
 
         self._default_kernel_path = None
         self._initrd_arch = None
@@ -140,6 +143,8 @@ class QEMURunner:
                 )
 
         # Kernel options
+        if self.interactive:
+            self.cmdline.append('rdinit=/bin/sh')
         if self.cmdline:
             self._qemu_args += ['-append', ' '.join(self.cmdline)]
         self._qemu_args += ['-kernel', self.kernel]
@@ -161,9 +166,26 @@ class QEMURunner:
         utils.green(f"QEMU version: \033[0m{self._get_qemu_ver_string()}")
 
         # Pretty print and run QEMU command
-        qemu_cmd = [qemu_path, *self._qemu_args]
+        qemu_cmd = []
+
+        if not self.interactive:
+            utils.check_cmd('timeout')
+            qemu_cmd += ['timeout', '--foreground', self.timeout]
+
+            utils.check_cmd('stdbuf')
+            qemu_cmd += ['stdbuf', '-eL', '-oL']
+
+        qemu_cmd += [qemu_path, *self._qemu_args]
+
         print(f"$ {' '.join(shlex.quote(str(elem)) for elem in qemu_cmd)}")
-        subprocess.run(qemu_cmd, check=True)
+        try:
+            subprocess.run(qemu_cmd, check=True)
+        except subprocess.CalledProcessError as err:
+            if err.returncode == 124:
+                utils.red("ERROR: QEMU timed out!")
+            else:
+                utils.red("ERROR: QEMU did not exit cleanly!")
+            sys.exit(err.returncode)
 
 
 class X86QEMURunner(QEMURunner):
@@ -220,6 +242,16 @@ def parse_arguments():
         '--no-kvm',
         action='store_true',
         help='Do not use KVM for accelration even when supported.')
+    parser.add_argument(
+        '-i',
+        '--interactive',
+        '--shell',
+        action='store_true',
+        help='Instead of immediately shutting down machine, spawn a shell.')
+    parser.add_argument('-t',
+                        '--timeout',
+                        default='3m',
+                        help="Value to pass to 'timeout' (default: '3m')")
 
     return parser.parse_args()
 
@@ -243,5 +275,8 @@ if __name__ == '__main__':
 
     if args.no_kvm:
         runner.use_kvm = False
+
+    runner.interactive = args.interactive
+    runner.timeout = args.timeout
 
     runner.run()
