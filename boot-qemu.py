@@ -678,11 +678,10 @@ def get_qemu_args(cfg):
         qemu_args += ["-cpu", kvm_cpu]
         qemu_args += ["-enable-kvm"]
         qemu_args += ["-smp", str(smp_value)]
-    else:
-        # By default, we do not use '-smp' with TCG for performance reasons.
-        # Only add it if the user explicitly requested it.
-        if smp_requested:
-            qemu_args += ["-smp", str(smp_value)]
+    # By default, we do not use '-smp' with TCG for performance reasons.
+    # Only add it if the user explicitly requested it.
+    elif smp_requested:
+        qemu_args += ["-smp", str(smp_value)]
 
     # Other miscellaneous options
     qemu_args += ["-display", "none"]
