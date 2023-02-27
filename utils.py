@@ -14,9 +14,8 @@ def check_cmd(cmd):
         cmd (str): External command name or path.
     """
     if not shutil.which(cmd):
-        die(
-            f"The external command '{cmd}' is needed but it could not be found in PATH, please install it!",
-        )
+        die(f"The external command '{cmd}' is needed but it could not be found in PATH, please install it!"
+            )
 
 
 def die(string):
@@ -58,9 +57,8 @@ def get_full_kernel_path(kernel_location, image, arch=None):
         # Otherwise, it is in the architecture's boot directory
         else:
             if not arch:
-                die(
-                    f"Kernel image ('{image}') is in the arch/ directory but 'arch' was not provided!",
-                )
+                die(f"Kernel image ('{image}') is in the arch/ directory but 'arch' was not provided!"
+                    )
             kernel = kernel_location.joinpath("arch", arch, "boot", image)
 
     if not kernel.exists():
