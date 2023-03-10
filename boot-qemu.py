@@ -75,7 +75,7 @@ def parse_arguments():
         "--shell",
         action="store_true",
         help=
-        "Instead of immediately shutting down the machine upon successful boot, pass 'rdinit=/bin/sh' on the kernel command line to allow interacting with the machine via a shell.",
+        "Instead of immediately shutting down the machine upon successful boot, pass 'rdinit=/bin/sh' on the kernel command line to allow interacting with the machine via a shell."
     )
     parser.add_argument(
         "-k",
@@ -83,20 +83,20 @@ def parse_arguments():
         required=True,
         type=str,
         help=
-        "Path to kernel image or kernel build folder to search for image in. Can be an absolute or relative path.",
+        "Path to kernel image or kernel build folder to search for image in. Can be an absolute or relative path."
     )
     parser.add_argument(
         "--no-kvm",
         action="store_true",
         help=
-        "Do not use KVM for acceleration even when supported (only recommended for debugging).",
+        "Do not use KVM for acceleration even when supported (only recommended for debugging)."
     )
     parser.add_argument(
         "-s",
         "--smp",
         type=int,
         help=
-        "Number of processors for virtual machine. By default, only machines spawned with KVM will use multiple vCPUS.",
+        "Number of processors for virtual machine. By default, only machines spawned with KVM will use multiple vCPUS."
     )
     parser.add_argument(
         "-t",
@@ -656,7 +656,7 @@ def get_qemu_args(cfg):
         dtb = kernel.parent.joinpath(dtb_dir, dtb)
         if not dtb.exists():
             utils.die(
-                f"'{dtb.stem}' is required for booting but it could not be found at '{dtb}'",
+                f"'{dtb.stem}' is required for booting but it could not be found at '{dtb}'"
             )
 
         qemu_args += ["-dtb", dtb]
@@ -678,11 +678,10 @@ def get_qemu_args(cfg):
         qemu_args += ["-cpu", kvm_cpu]
         qemu_args += ["-enable-kvm"]
         qemu_args += ["-smp", str(smp_value)]
-    else:
-        # By default, we do not use '-smp' with TCG for performance reasons.
-        # Only add it if the user explicitly requested it.
-        if smp_requested:
-            qemu_args += ["-smp", str(smp_value)]
+    # By default, we do not use '-smp' with TCG for performance reasons.
+    # Only add it if the user explicitly requested it.
+    elif smp_requested:
+        qemu_args += ["-smp", str(smp_value)]
 
     # Other miscellaneous options
     qemu_args += ["-display", "none"]

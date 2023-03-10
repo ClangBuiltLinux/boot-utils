@@ -14,9 +14,8 @@ def check_cmd(cmd):
         cmd (str): External command name or path.
     """
     if not shutil.which(cmd):
-        die(
-            f"The external command '{cmd}' is needed but it could not be found in PATH, please install it!",
-        )
+        die(f"The external command '{cmd}' is needed but it could not be found in PATH, please install it!"
+            )
 
 
 def die(string):
@@ -49,19 +48,16 @@ def get_full_kernel_path(kernel_location, image, arch=None):
     # If '-k' is a file, we can just use it directly
     if kernel_location.is_file():
         kernel = kernel_location
-    # If not, we need to find it based on the kernel build directory
+    # If the image is an uncompressed vmlinux or a UML image, it is in the
+    # root of the build folder
+    elif image in ("vmlinux", "linux"):
+        kernel = kernel_location.joinpath(image)
+    # Otherwise, it is in the architecture's boot directory
     else:
-        # If the image is an uncompressed vmlinux or a UML image, it is in the
-        # root of the build folder
-        if image in ("vmlinux", "linux"):
-            kernel = kernel_location.joinpath(image)
-        # Otherwise, it is in the architecture's boot directory
-        else:
-            if not arch:
-                die(
-                    f"Kernel image ('{image}') is in the arch/ directory but 'arch' was not provided!",
+        if not arch:
+            die(f"Kernel image ('{image}') is in the arch/ directory but 'arch' was not provided!"
                 )
-            kernel = kernel_location.joinpath("arch", arch, "boot", image)
+        kernel = kernel_location.joinpath("arch", arch, "boot", image)
 
     if not kernel.exists():
         die(f"Kernel ('{kernel}') does not exist!")
