@@ -1,824 +1,773 @@
 #!/usr/bin/env python3
 # pylint: disable=invalid-name
 
-import argparse
+from argparse import ArgumentParser
 import contextlib
 import os
 from pathlib import Path
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 
 import utils
 
-base_folder = Path(__file__).resolve().parent
-supported_architectures = [
-    "arm",
-    "arm32_v5",
-    "arm32_v6",
-    "arm32_v7",
-    "arm64",
-    "arm64be",
-    "m68k",
-    "mips",
-    "mipsel",
-    "ppc32",
-    "ppc32_mac",
-    "ppc64",
-    "ppc64le",
-    "riscv",
-    "s390",
-    "x86",
-    "x86_64",
+BOOT_UTILS = Path(__file__).resolve().parent
+SUPPORTED_ARCHES = [
+    'arm',
+    'arm32_v5',
+    'arm32_v6',
+    'arm32_v7',
+    'arm64',
+    'arm64be',
+    'm68k',
+    'mips',
+    'mipsel',
+    'ppc32',
+    'ppc32_mac',
+    'ppc64',
+    'ppc64le',
+    'riscv',
+    's390',
+    'x86',
+    'x86_64',
 ]
 
 
-def parse_arguments():
-    """
-    Parses arguments to script.
+class QEMURunner:
 
-    Returns:
-        A Namespace object containing key values from parser.parse_args()
-    """
-    parser = argparse.ArgumentParser()
+    def __init__(self):
 
-    parser.add_argument(
-        "-a",
-        "--architecture",
-        metavar="ARCH",
-        required=True,
-        type=str,
-        choices=supported_architectures,
-        help="The architecture to boot. Possible values are: %(choices)s")
-    parser.add_argument(
-        "--append",
-        default="",
-        type=str,
-        help="A string of values to pass to the kernel command line.")
-    parser.add_argument("--efi",
-                        action="store_true",
-                        help="Boot kernel using UEFI (arm64 and x86_64 only).")
-    parser.add_argument(
-        "-g",
-        "--gdb",
-        action="store_true",
-        help="Start QEMU with '-s -S' then launch GDB on 'vmlinux'.")
-    parser.add_argument("--gdb-bin",
-                        type=str,
-                        default="gdb-multiarch",
-                        help="GDB binary to use for debugging.")
-    parser.add_argument(
-        "-i",
-        "--interactive",
-        "--shell",
-        action="store_true",
-        help=
-        "Instead of immediately shutting down the machine upon successful boot, pass 'rdinit=/bin/sh' on the kernel command line to allow interacting with the machine via a shell."
-    )
-    parser.add_argument(
-        "-k",
-        "--kernel-location",
-        required=True,
-        type=str,
-        help=
-        "Path to kernel image or kernel build folder to search for image in. Can be an absolute or relative path."
-    )
-    parser.add_argument(
-        "--no-kvm",
-        action="store_true",
-        help=
-        "Do not use KVM for acceleration even when supported (only recommended for debugging)."
-    )
-    parser.add_argument(
-        "-s",
-        "--smp",
-        type=int,
-        help=
-        "Number of processors for virtual machine. By default, only machines spawned with KVM will use multiple vCPUS."
-    )
-    parser.add_argument(
-        "-t",
-        "--timeout",
-        type=str,
-        default="3m",
-        help="Value to pass along to 'timeout' (default: '3m')")
+        # Properties that can be adjusted by the user or class
+        self.cmdline = []
+        self.efi = False
+        self.gdb = False
+        self.gdb_bin = ''
+        self.interactive = False
+        self.kernel = None
+        self.kernel_dir = None
+        self.supports_efi = False
+        # It may be tempting to use self.use_kvm during initialization of
+        # subclasses to set certain properties but the user can explicitly opt
+        # out of KVM after instantiation, so any decisions based on it should
+        # be confined to run().
+        self.use_kvm = False
+        self.smp = 0
+        self.timeout = ''
 
-    return parser.parse_args()
+        self._default_kernel_path = None
+        self._dtb = None
+        self._efi_img = None
+        self._efi_vars = None
+        self._initrd_arch = None
+        self._kvm_cpu = ['host']
+        self._qemu_arch = None
+        self._qemu_args = [
+            '-display', 'none',
+            '-nodefaults',
+            '-no-reboot',
+        ]  # yapf: disable
+        self._qemu_path = None
+        self._ram = '512m'
 
+    def _find_dtb(self):
+        if not self._dtb:
+            raise RuntimeError('No dtb set?')
+        if not self.kernel:
+            raise RuntimeError('Cannot locate dtb without kernel')
 
-def arm64_have_el1_32():
-    """
-    Calls 'aarch64_32_bit_el1_supported' to see if 32-bit EL1 is supported on
-    the current machine.
-
-    Returns:
-        True if 32-bit EL1 is supported, false if not
-    """
-    try:
-        subprocess.run(base_folder.joinpath('utils',
-                                            'aarch64_32_bit_el1_supported'),
-                       check=True)
-    except subprocess.CalledProcessError:
-        return False
-    return True
-
-
-def can_use_kvm(can_test_for_kvm, guest_arch):
-    """
-    Checks that KVM can be used for faster VMs based on:
-        * User's request
-            * Whether or not '--no-kvm' was used
-        * '/dev/kvm' is readable and writable by the current user
-            * Implies hardware virtualization support
-        * The host architecture relative to guest architecture
-            * aarch64 always supports accelerated aarch64 guests, may support
-              accelerated aarch32 guests
-            * x86_64 always supports accelerated 64-bit and 32-bit x86 guests
-
-    Parameters:
-        can_test_for_vm (bool): False if user passed in '--no-kvm', True if not
-        guest_arch (str): The guest architecture being run.
-
-    Returns:
-        True if KVM can be used based on the above parameters, False if not.
-    """
-    # /dev/kvm must be readable and writeable to use KVM with QEMU
-    if can_test_for_kvm and os.access('/dev/kvm', os.R_OK | os.W_OK):
-        host_arch = platform.machine()
-
-        if host_arch == "aarch64":
-            if guest_arch in ('arm', 'arm32_v7'):
-                return arm64_have_el1_32()
-            return "arm64" in guest_arch
-
-        if host_arch == "x86_64":
-            return "x86" in guest_arch
-
-    # If we could not prove that we can use KVM safely, don't try
-    return False
-
-
-def get_smp_value(args):
-    """
-    Get the value of '-smp' based on user input and kernel configuration.
-        1. If '--smp' is supplied by the user, it is used unconditionally.
-        2. If '--smp' is not supplied by the user, attempt to locate the
-           .config file (see comment below for logic).
-        3. If the .config can be found, the upper bound of '-smp' is
-           CONFIG_NR_CPUS.
-        4. If the .config cannot be found, the upper bound of '-smp' is 8.
-        5. Get the number of usable cores in the system.
-        6. Return the smaller number between the limit from steps 3/4 and the
-           number of cores in the system from step 5.
-
-    Parameters:
-        args (Namespace): The Namespace object returned from parse_arguments()
-
-    Returns:
-        The smaller number between the number of usable cores in the system and
-        CONFIG_NR_CPUS.
-    """
-    # If the user specified a value, use it
-    if args.smp:
-        return args.smp
-
-    # kernel_location is either a path to the kernel source or a full kernel
-    # location. If it is a file, we need to strip off the basename so that we
-    # can easily navigate around with '..'.
-    kernel_dir = Path(args.kernel_location)
-    if kernel_dir.is_file():
-        kernel_dir = kernel_dir.parent
-
-    # If kernel_location is the kernel source, the configuration will be at
-    # <kernel_dir>/.config
-    #
-    # If kernel_location is a full kernel location, it could either be:
-    #   * <kernel_dir>/.config (if the image is vmlinux)
-    #   * <kernel_dir>/../../../.config (if the image is in arch/*/boot/)
-    #   * <kernel_dir>/config (if the image is in a TuxMake folder)
-    config_file = None
-    for config_name in [".config", "../../../.config", "config"]:
-        config_path = kernel_dir.joinpath(config_name)
-        if config_path.is_file():
-            config_file = config_path
-            break
-
-    # Choose a sensible default value based on treewide defaults for
-    # CONFIG_NR_CPUS then get the actual value if possible.
-    config_nr_cpus = 8
-    if config_file:
-        with config_file.open(encoding='utf-8') as file:
-            for line in file:
-                if "CONFIG_NR_CPUS=" in line:
-                    config_nr_cpus = int(line.split("=", 1)[1])
-                    break
-
-    # Use the minimum of the number of usable processors for the script or
-    # CONFIG_NR_CPUS.
-    usable_cpus = os.cpu_count()
-    return min(usable_cpus, config_nr_cpus)
-
-
-def setup_cfg(args):
-    """
-    Sets up the global configuration based on user input.
-
-    Meaning of each key:
-
-        * append: The additional values to pass to the kernel command line.
-        * architecture: The guest architecture from the list of supported
-                        architectures.
-        * efi: Whether or not to boot the guest under UEFI (arm64 and x86_64
-               only).
-        * gdb: Whether or not the user wants to debug the kernel using GDB.
-        * gdb_bin: The name of or path to the GDB executable that the user
-                   wants to debug with.
-        * interactive: Whether or not the user is going to be running the
-                       machine interactively.
-        * kernel_location: The full path to the kernel image or build folder.
-        * smp_requested: Whether or not the user specified a value with
-                         '--smp'.
-        * smp_value: The value to use with '-smp' (will be used when
-                     smp_requested is True or using KVM).
-        * timeout: The value to pass along to 'timeout' if not running
-                   interactively.
-        * use_kvm: Whether or not KVM will be used.
-
-    Parameters:
-        args (Namespace): The Namespace object returned from parse_arguments()
-
-    Returns:
-        A dictionary of configuration values
-    """
-    return {
-        # Required
-        "architecture": args.architecture,
-        "kernel_location": Path(args.kernel_location).resolve(),
-
-        # Optional
-        "append": args.append,
-        "efi": args.efi,
-        "gdb": args.gdb,
-        "gdb_bin": args.gdb_bin,
-        "interactive": args.interactive or args.gdb,
-        "smp_requested": args.smp is not None,
-        "smp_value": get_smp_value(args),
-        "timeout": args.timeout,
-        "use_kvm": can_use_kvm(not args.no_kvm, args.architecture),
-    }
-
-
-def get_qemu_ver_string(qemu):
-    """
-    Prints the first line of QEMU's version output.
-
-    Parameters:
-        qemu (str): The QEMU executable name or path to get the version of.
-
-    Returns:
-        The first line of the QEMU version output.
-    """
-    utils.check_cmd(qemu)
-    qemu_version_call = subprocess.run([qemu, "--version"],
-                                       capture_output=True,
-                                       check=True)
-    # Equivalent of 'head -1'
-    return qemu_version_call.stdout.decode("UTF-8").split("\n")[0]
-
-
-def get_qemu_ver_tuple(qemu):
-    """
-    Prints QEMU's version as an integer with at least six digits.
-
-    Errors if the requested QEMU could not be found.
-
-    Parameters:
-        qemu (str): The QEMU executable name or path to get the version of.
-
-    Returns:
-        The QEMU version as an integer with at least six digits.
-    """
-    qemu_version_string = get_qemu_ver_string(qemu)
-    # "QEMU emulator version x.y.z (...)" -> x.y.z -> ['x', 'y', 'z']
-    qemu_version = qemu_version_string.split(" ")[3].split(".")
-
-    return tuple(int(x) for x in qemu_version)
-
-
-def get_linux_ver_tuple(decomp_cmd):
-    """
-    Searches the Linux kernel binary for the version string using 'strings'
-    then prints it as an integer with at least six digits.
-
-    Errors if the decompression executable could not be found.
-
-    Parameters:
-        decomp_cmd (list): A list with the decompression command plus arguments
-                           to decompress the kernel to stdout.
-
-    Returns:
-        The Linux kernel version as an integer with at least six digits.
-    """
-    decomp_exec = decomp_cmd[0]
-    utils.check_cmd(decomp_exec)
-    decomp = subprocess.run(decomp_cmd, capture_output=True, check=True)
-
-    utils.check_cmd("strings")
-    strings = subprocess.run(["strings"],
-                             capture_output=True,
-                             check=True,
-                             input=decomp.stdout)
-
-    linux_version = None
-    for line in strings.stdout.decode("UTF-8", "ignore").split("\n"):
-        if re.search(r"Linux version \d+\.\d+\.\d+", line):
-            linux_version = re.search(r"\d+\.\d+\.\d+", line)[0].split(".")
-            break
-    if not linux_version:
-        kernel_path = decomp_cmd[-1]
-        utils.die(
-            f"Linux version string could not be found in '{kernel_path}'")
-
-    return tuple(int(x) for x in linux_version)
-
-
-def get_and_decomp_rootfs(cfg):
-    """
-    Decompress and get the full path of the initial ramdisk for use with QEMU's
-    '-initrd' parameter. Handles the special cases of the arm32_* and ppc32*
-    values sharing the same initial ramdisk.
-
-    Parameters:
-        cfg (dict): The configuration dictionary generated with setup_cfg().
-
-    Returns:
-        rootfs (str): The path to the decompressed rootfs file.
-    """
-
-    arch = cfg["architecture"]
-    if "arm32" in arch:
-        arch_rootfs_dir = "arm"
-    elif "ppc32" in arch:
-        arch_rootfs_dir = "ppc32"
-    else:
-        arch_rootfs_dir = arch
-    rootfs = base_folder.joinpath("images", arch_rootfs_dir, "rootfs.cpio")
-
-    # This could be 'rootfs.unlink(missing_ok=True)' but that was only added in
-    # Python 3.8.
-    if rootfs.exists():
-        rootfs.unlink()
-
-    utils.check_cmd("zstd")
-    subprocess.run(["zstd", "-q", "-d", f"{rootfs}.zst", "-o", rootfs],
-                   check=True)
-
-    return rootfs
-
-
-def get_efi_args(guest_arch):
-    """
-    Generate QEMU arguments for EFI and performing any necessary setup steps
-    like preparing firmware files.
-
-    Parameters:
-        guest_arch (str): The architecture of the guest.
-
-    Return:
-        efi_args (list): A list of arguments for QEMU to boot using UEFI.
-    """
-    efi_img_locations = {
-        "arm64": [
-            Path("edk2/aarch64/QEMU_EFI.silent.fd"),  # Fedora
-            Path("edk2/aarch64/QEMU_EFI.fd"),  # Arch Linux (current)
-            Path("edk2-armvirt/aarch64/QEMU_EFI.fd"),  # Arch Linux (old)
-            Path("qemu-efi-aarch64/QEMU_EFI.fd"),  # Debian and Ubuntu
-            None,  # Terminator
-        ],
-        "x86_64": [
-            Path("edk2/x64/OVMF_CODE.fd"),  # Arch Linux (current), Fedora
-            Path("edk2-ovmf/x64/OVMF_CODE.fd"),  # Arch Linux (old)
-            Path("OVMF/OVMF_CODE.fd"),  # Debian and Ubuntu
-            None,  # Terminator
-        ],
-    }  # yapf: disable
-
-    if guest_arch not in efi_img_locations:
-        utils.yellow(
-            f"EFI boot requested for unsupported architecture ('{guest_arch}'), ignoring...",
-        )
-        return []
-
-    for efi_img_location in efi_img_locations[guest_arch]:
-        if efi_img_location is None:
+        # If we are in a boot folder, look for them in the dts folder in it.
+        # Otherwise, assume there is a 'dtbs' folder in the same folder as the
+        # kernel image (tuxmake)
+        dtb_dir = 'dts' if self.kernel.parent.name == 'boot' else 'dtbs'
+        if not (dtb := Path(self.kernel.parent, dtb_dir, self._dtb)).exists():
             raise FileNotFoundError(
-                f"edk2 could not be found for {guest_arch}!")
-        efi_img = Path("/usr/share", efi_img_location)
-        if efi_img.exists():
-            break
+                f"dtb ('{self._dtb}') is required for booting but it could not be found at expected location ('{dtb}')",
+            )
 
-    if guest_arch == "arm64":
+        return dtb
+
+    def _get_default_smp_value(self):
+        if not self.kernel_dir:
+            raise RuntimeError('No kernel build folder specified?')
+
+        # If kernel_dir is the kernel source, the configuration will be at
+        # <kernel_dir>/.config
+        #
+        # If kernel_dir is the direct parent to the full kernel image, the
+        # configuration could either be:
+        #   * <kernel_dir>/.config (if the image is vmlinux)
+        #   * <kernel_dir>/../../../.config (if the image is in arch/*/boot/)
+        #   * <kernel_dir>/config (if the image is in a TuxMake folder)
+        possible_locations = ['.config', '../../../.config', 'config']
+        configuration = utils.find_first_file(self.kernel_dir,
+                                              possible_locations,
+                                              required=False)
+
+        config_nr_cpus = 8  # sensible default based on treewide defaults,
+        if configuration:
+            conf_txt = configuration.read_text(encoding='utf-8')
+            if (match := re.search(r'CONFIG_NR_CPUS=(\d+)', conf_txt)):
+                config_nr_cpus = int(match.groups()[0])
+
+        # Use the minimum of the number of usable processers for the script or
+        # CONFIG_NR_CPUS.
+        usable_cpus = os.cpu_count()
+        return min(usable_cpus, config_nr_cpus)
+
+    def _get_kernel_ver_tuple(self, decomp_prog):
+        if not self.kernel:
+            raise RuntimeError('No kernel set?')
+
+        utils.check_cmd(decomp_prog)
+        if decomp_prog in ('gzip', ):
+            decomp_cmd = [decomp_prog, '-c', '-d', self.kernel]
+        decomp = subprocess.run(decomp_cmd, capture_output=True, check=True)
+
+        utils.check_cmd('strings')
+        strings = subprocess.run('strings',
+                                 capture_output=True,
+                                 check=True,
+                                 input=decomp.stdout)
+        strings_stdout = strings.stdout.decode(encoding='utf-8',
+                                               errors='ignore')
+
+        if not (match := re.search(r'^Linux version (\d+\.\d+\.\d+)',
+                                   strings_stdout,
+                                   flags=re.M)):
+            raise RuntimeError(
+                f"Could not find Linux version in {self.kernel}?")
+
+        return tuple(int(x) for x in match.groups()[0].split('.'))
+
+    def _get_qemu_ver_string(self):
+        if not self._qemu_path:
+            raise RuntimeError('No path to QEMU set?')
+        qemu_ver = subprocess.run([self._qemu_path, '--version'],
+                                  capture_output=True,
+                                  check=True,
+                                  text=True)
+        return qemu_ver.stdout.splitlines()[0]
+
+    def _get_qemu_ver_tuple(self):
+        qemu_ver_string = self._get_qemu_ver_string()
+        if not (match := re.search(r'version (\d+\.\d+.\d+)',
+                                   qemu_ver_string)):
+            raise RuntimeError('Could not find QEMU version?')
+        return tuple(int(x) for x in match.groups()[0].split('.'))
+
+    def _have_dev_kvm_access(self):
+        return os.access('/dev/kvm', os.R_OK | os.W_OK)
+
+    def _prepare_initrd(self):
+        if not self._initrd_arch:
+            raise RuntimeError('No initrd architecture specified?')
+        if not (src := Path(BOOT_UTILS, 'images', self._initrd_arch,
+                            'rootfs.cpio.zst')):
+            raise FileNotFoundError(f"initrd ('{src}') does not exist?")
+
+        (dst := src.with_suffix('')).unlink(missing_ok=True)
+
+        utils.check_cmd('zstd')
+        subprocess.run(['zstd', '-d', src, '-o', dst, '-q'], check=True)
+
+        return dst
+
+    def _run_fg(self):
+        # Pretty print and run QEMU command
+        qemu_cmd = []
+
+        if not self.interactive:
+            utils.check_cmd('timeout')
+            qemu_cmd += ['timeout', '--foreground', self.timeout]
+
+            utils.check_cmd('stdbuf')
+            qemu_cmd += ['stdbuf', '-eL', '-oL']
+
+        qemu_cmd += [self._qemu_path, *self._qemu_args]
+
+        print(f"$ {' '.join(shlex.quote(str(elem)) for elem in qemu_cmd)}")
+        try:
+            subprocess.run(qemu_cmd, check=True)
+        except subprocess.CalledProcessError as err:
+            if err.returncode == 124:
+                utils.red("ERROR: QEMU timed out!")
+            else:
+                utils.red("ERROR: QEMU did not exit cleanly!")
+            sys.exit(err.returncode)
+
+    def _run_gdb(self):
+        qemu_cmd = [self._qemu_path, *self._qemu_args]
+
+        utils.check_cmd(self.gdb_bin)
+        utils.check_cmd('lsof')
+
+        gdb_cmd = [
+            self.gdb_bin,
+            Path(self.kernel_dir, 'vmlinux'),
+            '-ex',
+            'target remote :1234',
+        ]
+
+        while True:
+            lsof = subprocess.run(['lsof', '-i:1234'],
+                                  capture_output=True,
+                                  check=False)
+            if lsof.returncode == 0:
+                utils.die('Port 1234 is already in use, is QEMU running?')
+
+            utils.green('Starting QEMU with gdb connection on port 1234...')
+            with subprocess.Popen(qemu_cmd,
+                                  preexec_fn=os.setpgrp) as qemu_proc:
+                utils.green(f"Starting {self.gdb_bin}...")
+                with subprocess.Popen(gdb_cmd) as gdb_proc, \
+                     contextlib.suppress(KeyboardInterrupt):
+                    gdb_proc.wait()
+
+                utils.red('Killing QEMU...')
+                qemu_proc.kill()
+
+            answer = input('Re-run QEMU + gdb [y/n] ')
+            if answer.lower() == 'n':
+                break
+
+    def _set_kernel_vars(self):
+        if self.kernel:
+            if not self.kernel_dir:
+                self.kernel_dir = self.kernel.parent
+            # Nothing else to do, kernel image and build folder located and set
+            return
+
+        if not self.kernel_dir:
+            raise RuntimeError(
+                'No kernel image or kernel build folder specified?')
+        if not self._default_kernel_path:
+            raise RuntimeError('No default kernel path specified?')
+
+        possible_kernel_locations = {
+            Path(self._default_kernel_path),  # default (kbuild)
+            Path(self._default_kernel_path.name),  # tuxmake
+        }
+        self.kernel = utils.find_first_file(self.kernel_dir,
+                                            possible_kernel_locations)
+
+    def _set_qemu_path(self):
+        if self._qemu_path:
+            return  # already found and set
+        if not self._qemu_arch:
+            raise RuntimeError('No QEMU architecture set?')
+        qemu_bin = f"qemu-system-{self._qemu_arch}"
+        if not (qemu_path := shutil.which(qemu_bin)):
+            raise RuntimeError(
+                f'{qemu_bin} could not be found on your system?')
+        self._qemu_path = Path(qemu_path)
+
+    def run(self):
+        # Make sure QEMU binary is configured and available
+        self._set_qemu_path()
+
+        # Locate kernel (may be done earlier in subclasses)
+        self._set_kernel_vars()
+
+        # EFI:
+        if self.efi:
+            self._qemu_args += [
+                '-drive', f"if=pflash,format=raw,file={self._efi_img},readonly=on",
+                '-drive', f"if=pflash,format=raw,file={self._efi_vars}",
+                '-object', 'rng-random,filename=/dev/urandom,id=rng0',
+                '-device', 'virtio-rng-pci',
+            ]  # yapf: disable
+
+        # Kernel options
+        if self.interactive or args.gdb:
+            self.cmdline.append('rdinit=/bin/sh')
+        if self.gdb:
+            self.cmdline.append('nokaslr')
+        if self.cmdline:
+            self._qemu_args += ['-append', ' '.join(self.cmdline)]
+        if self._dtb:
+            self._qemu_args += ['-dtb', self._find_dtb()]
+        self._qemu_args += ['-kernel', self.kernel]
+        self._qemu_args += ['-initrd', self._prepare_initrd()]
+
+        # KVM
+        if self.use_kvm:
+            if not self.smp:
+                self.smp = self._get_default_smp_value()
+            self._qemu_args += ['-cpu', ','.join(self._kvm_cpu), '-enable-kvm']
+
+        # Machine specs
+        self._qemu_args += ['-m', self._ram]
+        if self.smp:
+            self._qemu_args += ['-smp', str(self.smp)]
+
+        # Show information about QEMU
+        utils.green(f"QEMU location: \033[0m{self._qemu_path.parent}")
+        utils.green(f"QEMU version: \033[0m{self._get_qemu_ver_string()}")
+
+        if self.gdb:
+            self._qemu_args += ['-s', '-S']
+
+            self._run_gdb()
+        else:
+            self._qemu_args += ['-serial', 'mon:stdio']
+
+            self._run_fg()
+
+
+class ARMQEMURunner(QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self._default_kernel_path = Path('arch/arm/boot/zImage')
+        self._initrd_arch = self._qemu_arch = 'arm'
+        self._machine = 'virt'
+
+    def run(self):
+        self._qemu_args += ['-machine', self._machine]
+
+        super().run()
+
+
+class ARMV5QEMURunner(ARMQEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self.cmdline.append('earlycon')
+
+        self._dtb = 'aspeed-bmc-opp-palmetto.dtb'
+        self._machine = 'palmetto-bmc'
+
+
+class ARMV6QEMURunner(ARMQEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self._dtb = 'aspeed-bmc-opp-romulus.dtb'
+        self._machine = 'romulus-bmc'
+
+
+class ARMV7QEMURunner(ARMQEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self.use_kvm = self._can_use_kvm()
+
+        self.cmdline += ['console=ttyAMA0', 'earlycon']
+
+    def _can_use_kvm(self):
+        # 32-bit ARM KVM was ripped out in 5.7, so we do not bother checking
+        # for it here.
+        if platform.machine() != 'aarch64':
+            return False
+
+        # 32-bit EL1 is not supported on all cores so support for it must be
+        # explicitly queried via the KVM_CHECK_EXTENSION ioctl().
+        try:
+            subprocess.run(Path(BOOT_UTILS, 'utils',
+                                'aarch64_32_bit_el1_supported'),
+                           check=True)
+        except subprocess.CalledProcessError:
+            return False
+
+        return self._have_dev_kvm_access()
+
+    def run(self):
+        if self.use_kvm:
+            self._kvm_cpu.append('aarch64=off')
+            self._qemu_arch = 'aarch64'
+
+        super().run()
+
+
+class ARM64QEMURunner(QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self.cmdline += ['console=ttyAMA0', 'earlycon']
+        self.supports_efi = True
+        self.use_kvm = platform.machine() == 'aarch64' and \
+                       self._have_dev_kvm_access()
+
+        self._default_kernel_path = Path('arch/arm64/boot/Image.gz')
+        self._initrd_arch = 'arm64'
+        self._qemu_arch = 'aarch64'
+
+    def _get_cpu_val(self):
+        cpu = ['max']
+
+        self._set_qemu_path()
+        # See the two gitlab links below for more details
+        if (qemu_ver := self._get_qemu_ver_tuple()) >= (6, 2, 50):
+            self._set_kernel_vars()
+            kernel_ver = self._get_kernel_ver_tuple('gzip')
+
+            # https://gitlab.com/qemu-project/qemu/-/issues/964
+            if kernel_ver < (4, 16, 0):
+                cpu = ['cortex-a72']
+            # https://gitlab.com/qemu-project/qemu/-/commit/69b2265d5fe8e0f401d75e175e0a243a7d505e53
+            elif kernel_ver < (5, 12, 0):
+                cpu.append('lpa2=off')
+
+        # https://lore.kernel.org/YlgVa+AP0g4IYvzN@lakrids/
+        if 'max' in cpu and qemu_ver >= (6, 0, 0):
+            cpu.append('pauth-impdef=true')
+
+        return cpu
+
+    def _setup_efi(self):
         # Sizing the images to 64M is recommended by "Prepare the firmware" section at
         # https://mirrors.edge.kernel.org/pub/linux/kernel/people/will/docs/qemu/qemu-arm64-howto.html
         efi_img_size = 64 * 1024 * 1024  # 64M
 
-        efi_img_qemu = base_folder.joinpath("images", guest_arch, "efi.img")
-        shutil.copyfile(efi_img, efi_img_qemu)
-        with efi_img_qemu.open(mode="r+b") as file:
-            file.truncate(efi_img_size)
+        usr_share = Path('/usr/share')
 
-        efi_vars_qemu = base_folder.joinpath("images", guest_arch,
-                                             "efivars.img")
-        efi_vars_qemu.unlink(missing_ok=True)
-        with efi_vars_qemu.open(mode="xb") as file:
-            file.truncate(efi_img_size)
-
-    elif guest_arch == "x86_64":
-        efi_img_qemu = efi_img  # This is just usable, it is marked read only
-
-        # Copy base EFI variables file
-        efi_vars_locations = [
-            Path("edk2/x64/OVMF_VARS.fd"),  # Arch Linux and Fedora
-            Path("OVMF/OVMF_VARS.fd"),  # Debian and Ubuntu
-            None,  # Terminator
+        aavmf_locations = [
+            Path('edk2/aarch64/QEMU_EFI.silent.fd'),  # Fedora
+            Path('edk2/aarch64/QEMU_EFI.fd'),  # Arch Linux (current)
+            Path('edk2-armvirt/aarch64/QEMU_EFI.fd'),  # Arch Linux (old)
+            Path('qemu-efi-aarch64/QEMU_EFI.fd'),  # Debian and Ubuntu
         ]
-        for efi_vars_location in efi_vars_locations:
-            if efi_vars_location is None:
-                raise FileNotFoundError("OVMF_VARS.fd could not be found!")
-            efi_vars = Path('/usr/share', efi_vars_location)
-            if efi_vars.exists():
-                break
+        aavmf = utils.find_first_file(usr_share, aavmf_locations)
 
-        efi_vars_qemu = base_folder.joinpath("images", guest_arch,
-                                             efi_vars.name)
-        shutil.copyfile(efi_vars, efi_vars_qemu)
+        self._efi_img = Path(BOOT_UTILS, 'images', self._initrd_arch,
+                             'efi.img')
+        # This file is in /usr/share, so it must be copied in order to be
+        # modified.
+        shutil.copyfile(aavmf, self._efi_img)
+        with self._efi_img.open(mode='r+b') as file:
+            file.truncate(efi_img_size)
 
-    # The RNG is included to get the benefits of a KASLR seed on arm64
-    # and it does not hurt x86_64.
-    return [
-        "-drive", f"if=pflash,format=raw,file={efi_img_qemu},readonly=on",
-        "-drive", f"if=pflash,format=raw,file={efi_vars_qemu}",
-        "-object", "rng-random,filename=/dev/urandom,id=rng0",
-        "-device", "virtio-rng-pci",
-    ]  # yapf: disable
+        self._efi_vars = self._efi_img.with_name('efivars.img')
+        self._efi_vars.unlink(missing_ok=True)
+        with self._efi_vars.open(mode='xb') as file:
+            file.truncate(efi_img_size)
 
+    def run(self):
+        machine = ['virt', 'gic-version=max']
 
-def get_qemu_args(cfg):
-    """
-    Generate the QEMU command from the QEMU executable and parameters, based on
-    a variety of factors:
-        * User's input
-        * Whether or not KVM is being used
-            * A different executable and options might be needed
-        * QEMU and Linux kernel version
-        * Locations of firmwares and device tree blobs
+        if not self.use_kvm:
+            cpu_val = self._get_cpu_val()
+            self._qemu_args += ['-cpu', ','.join(cpu_val)]
 
-    Parameters:
-        cfg (dict): The configuration dictionary generated with setup_cfg().
-
-    Returns:
-        cfg (dict): The configuration dictionary updated with the QEMU command.
-    """
-    # Static values from cfg
-    arch = cfg["architecture"]
-    efi = cfg["efi"]
-    kernel_location = cfg["kernel_location"]
-    gdb = cfg["gdb"]
-    interactive = cfg["interactive"]
-    smp_requested = cfg["smp_requested"]
-    smp_value = cfg["smp_value"]
-    use_kvm = cfg["use_kvm"]
-
-    # Default values, may be overwritten or modified below
-    append = cfg["append"]
-    dtb = None
-    kernel = None
-    kernel_arch = arch
-    kernel_image = "zImage"
-    kvm_cpu = "host"
-    ram = "512m"
-    qemu_args = []
-
-    if arch == "arm32_v5":
-        append += " earlycon"
-        dtb = "aspeed-bmc-opp-palmetto.dtb"
-        kernel_arch = "arm"
-        qemu_args += ["-machine", "palmetto-bmc"]
-        qemu = "qemu-system-arm"
-
-    elif arch == "arm32_v6":
-        dtb = "aspeed-bmc-opp-romulus.dtb"
-        kernel_arch = "arm"
-        qemu = "qemu-system-arm"
-        qemu_args += ["-machine", "romulus-bmc"]
-
-    elif arch in ("arm", "arm32_v7"):
-        append += " console=ttyAMA0 earlycon"
-        kernel_arch = "arm"
-        qemu_args += ["-machine", "virt"]
-        if use_kvm:
-            kvm_cpu += ",aarch64=off"
-            qemu = "qemu-system-aarch64"
-        else:
-            qemu = "qemu-system-arm"
-
-    elif arch in ("arm64", "arm64be"):
-        append += " console=ttyAMA0 earlycon"
-        kernel_arch = "arm64"
-        kernel_image = "Image.gz"
-        qemu = "qemu-system-aarch64"
-        machine = "virt,gic-version=max"
-
-        if not use_kvm:
-            cpu = "max"
-            kernel = utils.get_full_kernel_path(kernel_location, kernel_image,
-                                                kernel_arch)
-            qemu_ver = get_qemu_ver_tuple(qemu)
-
-            if qemu_ver >= (6, 2, 50):
-                gzip_kernel_cmd = ["gzip", "-c", "-d", kernel]
-                linux_ver = get_linux_ver_tuple(gzip_kernel_cmd)
-
-                # https://gitlab.com/qemu-project/qemu/-/issues/964
-                if linux_ver < (4, 16, 0):
-                    cpu = "cortex-a72"
-                # https://gitlab.com/qemu-project/qemu/-/commit/69b2265d5fe8e0f401d75e175e0a243a7d505e53
-                elif linux_ver < (5, 12, 0):
-                    cpu += ",lpa2=off"
-
-            # https://lore.kernel.org/YlgVa+AP0g4IYvzN@lakrids/
-            if "max" in cpu and qemu_ver >= (6, 0, 0):
-                cpu += ",pauth-impdef=true"
-
-            qemu_args += ["-cpu", cpu]
             # Boot with VHE emulation, which allows the kernel to run at EL2.
             # KVM does not emulate VHE, so this cannot be unconditional.
-            machine += ",virtualization=true"
+            machine.append('virtualization=true')
 
-        qemu_args += ["-machine", machine]
+        self._qemu_args += ['-machine', ','.join(machine)]
 
-    elif arch == "m68k":
-        append += " console=ttyS0,115200"
-        kernel_image = "vmlinux"
-        qemu = "qemu-system-m68k"
-        qemu_args += ["-cpu", "m68040"]
-        qemu_args += ["-M", "q800"]
+        if self.efi:
+            self._setup_efi()
 
-    elif arch in ("mips", "mipsel"):
-        kernel_arch = "mips"
-        kernel_image = "vmlinux"
-        qemu = f"qemu-system-{arch}"
-        qemu_args += ["-cpu", "24Kf"]
-        qemu_args += ["-machine", "malta"]
+        super().run()
 
-    elif "ppc32" in arch:
-        if arch == "ppc32":
-            kernel_image = "uImage"
-            qemu_args += ["-machine", "bamboo"]
-        elif arch == "ppc32_mac":
-            kernel_image = "vmlinux"
-            qemu_args += ["-machine", "mac99"]
 
-        append += " console=ttyS0"
-        kernel_arch = "powerpc"
-        qemu = "qemu-system-ppc"
-        ram = "128m"
+class ARM64BEQEMURunner(ARM64QEMURunner):
 
-    elif arch == "ppc64":
-        kernel_arch = "powerpc"
-        kernel_image = "vmlinux"
-        qemu = "qemu-system-ppc64"
-        qemu_args += ["-cpu", "power8"]
-        qemu_args += ["-machine", "pseries"]
-        qemu_args += ["-vga", "none"]
-        ram = "1G"
+    def __init__(self):
+        super().__init__()
 
-    elif arch == "ppc64le":
-        kernel_arch = "powerpc"
-        kernel_image = "zImage.epapr"
-        qemu = "qemu-system-ppc64"
-        qemu_args += ["-device", "ipmi-bmc-sim,id=bmc0"]
-        qemu_args += ["-device", "isa-ipmi-bt,bmc=bmc0,irq=10"]
-        qemu_args += ["-machine", "powernv"]
-        ram = "2G"
+        self.supports_efi = False
 
-    elif arch == "riscv":
-        append += " earlycon"
-        kernel_image = "Image"
+        self._initrd_arch = 'arm64be'
 
-        bios = "default"
-        deb_bios = Path(
-            "/usr/lib/riscv64-linux-gnu/opensbi/qemu/virt/fw_jump.elf")
-        if "BIOS" in os.environ:
-            bios = os.environ["BIOS"]
-        elif deb_bios.exists():
+
+class M68KQEMURunner(QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self.cmdline.append('console=ttyS0,115200')
+        self._default_kernel_path = Path('vmlinux')
+        self._initrd_arch = self._qemu_arch = 'm68k'
+        self._qemu_args += ['-cpu', 'm68040', '-M', 'q800']
+
+
+class MIPSQEMURunner(QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self._default_kernel_path = Path('vmlinux')
+        self._initrd_arch = self._qemu_arch = 'mips'
+        self._qemu_args += ['-cpu', '24Kf', '-machine', 'malta']
+
+
+class MIPSELQEMURunner(MIPSQEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self._initrd_arch = self._qemu_arch = 'mipsel'
+
+
+class PowerPC32QEMURunner(QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self.cmdline.append('console=ttyS0')
+        self._default_kernel_path = Path('arch/powerpc/boot/uImage')
+        self._initrd_arch = 'ppc32'
+        self._machine = 'bamboo'
+        self._qemu_arch = 'ppc'
+        self._ram = '128m'
+
+    def run(self):
+        self._qemu_args += ['-machine', self._machine]
+
+        super().run()
+
+
+class PowerPC32MacQEMURunner(PowerPC32QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self._default_kernel_path = Path('vmlinux')
+        self._machine = 'mac99'
+
+
+class PowerPC64QEMURunner(QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self._default_kernel_path = Path('vmlinux')
+        self._initrd_arch = self._qemu_arch = 'ppc64'
+        self._qemu_args += [
+            '-cpu', 'power8',
+            '-machine', 'pseries',
+            '-vga', 'none',
+        ]  # yapf: disable
+        self._ram = '1G'
+
+
+class PowerPC64LEQEMURunner(QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self._default_kernel_path = Path('arch/powerpc/boot/zImage.epapr')
+        self._initrd_arch = 'ppc64le'
+        self._qemu_arch = 'ppc64'
+        self._qemu_args += [
+            '-device', 'ipmi-bmc-sim,id=bmc0',
+            '-device', 'isa-ipmi-bt,bmc=bmc0,irq=10',
+            '-machine', 'powernv',
+        ]  # yapf: disable
+        self._ram = '2G'
+
+
+class RISCVQEMURunner(QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self.cmdline.append('earlycon')
+        self._default_kernel_path = Path('arch/riscv/boot/Image')
+        self._initrd_arch = 'riscv'
+        self._qemu_arch = 'riscv64'
+
+        deb_bios = '/usr/lib/riscv64-linux-gnu/opensbi/qemu/virt/fw_jump.elf'
+        if 'BIOS' in os.environ:
+            bios = os.environ['BIOS']
+        elif Path(deb_bios).exists():
             bios = deb_bios
-
-        qemu = "qemu-system-riscv64"
-        qemu_args += ["-bios", bios]
-        qemu_args += ["-M", "virt"]
-
-    elif arch == "s390":
-        kernel_image = "bzImage"
-        qemu = "qemu-system-s390x"
-        qemu_args += ["-M", "s390-ccw-virtio"]
-
-    elif "x86" in arch:
-        append += " console=ttyS0 earlycon=uart8250,io,0x3f8"
-        kernel_image = "bzImage"
-
-        if use_kvm and not efi:
-            qemu_args += ["-d", "unimp,guest_errors"]
-        elif arch == "x86_64":
-            qemu_args += ["-cpu", "Nehalem"]
-
-        qemu = "qemu-system-i386" if arch == "x86" else "qemu-system-x86_64"
-
-    # Make sure QEMU is available in PATH, otherwise there is little point to
-    # continuing.
-    utils.check_cmd(qemu)
-
-    # '-kernel'
-    if not kernel:
-        kernel = utils.get_full_kernel_path(kernel_location, kernel_image,
-                                            kernel_arch)
-    qemu_args += ["-kernel", kernel]
-
-    # '-dtb'
-    if dtb:
-        # If we are in a boot folder, look for them in the dts folder in it.
-        # Otherwise, assume there is a dtbs folder in the same folder as the
-        # kernel image (tuxmake)
-        dtb_dir = "dts" if "boot" in str(kernel) else "dtbs"
-
-        dtb = kernel.parent.joinpath(dtb_dir, dtb)
-        if not dtb.exists():
-            utils.die(
-                f"'{dtb.stem}' is required for booting but it could not be found at '{dtb}'"
-            )
-
-        qemu_args += ["-dtb", dtb]
-
-    # '-append'
-    if gdb:
-        append += " nokaslr"
-    if interactive:
-        append += " rdinit=/bin/sh"
-    if len(append) > 0:
-        qemu_args += ["-append", append.strip()]
-
-    # Handle UEFI firmware if necessary
-    if efi:
-        qemu_args += get_efi_args(arch)
-
-    # KVM and '-smp'
-    if use_kvm:
-        qemu_args += ["-cpu", kvm_cpu]
-        qemu_args += ["-enable-kvm"]
-        qemu_args += ["-smp", str(smp_value)]
-    # By default, we do not use '-smp' with TCG for performance reasons.
-    # Only add it if the user explicitly requested it.
-    elif smp_requested:
-        qemu_args += ["-smp", str(smp_value)]
-
-    # Other miscellaneous options
-    qemu_args += ["-display", "none"]
-    qemu_args += ["-initrd", get_and_decomp_rootfs(cfg)]
-    qemu_args += ["-m", ram]
-    qemu_args += ["-nodefaults"]
-    qemu_args += ["-no-reboot"]
-
-    # Resolve the full path to QEMU for the command, as recommended for use
-    # with subprocess.Popen()
-    qemu = shutil.which(qemu)
-
-    cfg["qemu_cmd"] = [qemu, *qemu_args]
-
-    return cfg
-
-
-def pretty_print_qemu_info(qemu):
-    """
-    Prints where QEMU is being used from and its version. Useful for making
-    sure a specific version of QEMU is being used.
-
-    Parameters:
-        qemu (str): A string containing the full path to the QEMU executable.
-    """
-    qemu_dir = Path(qemu).parent
-    qemu_version_string = get_qemu_ver_string(qemu)
-
-    utils.green(f"QEMU location: \033[0m{qemu_dir}")
-    utils.green(f"QEMU version: \033[0m{qemu_version_string}\n")
-
-
-def pretty_print_qemu_cmd(qemu_cmd):
-    """
-    Prints the QEMU command in a "pretty" manner, similar to how 'set -x' works in bash.
-        * Surrounds list elements that have spaces with quotation marks so that
-          copying and pasting the command in a shell works.
-        * Prints the QEMU executable as just the executable name, rather than
-          the full path. This is done purely for aesthetic reasons, as the
-          executable would normally be called with just its name through PATH
-          but subprocess.Popen() recommends using a full path for maximum
-          compatibility so it was generated in get_qemu_args().
-
-    Parameters:
-        qemu_cmd (list): QEMU command list.
-    """
-    qemu_cmd_pretty = ""
-    for element in qemu_cmd:
-        if " " in str(element):
-            qemu_cmd_pretty += f' "{element}"'
-        elif "qemu-system-" in str(element):
-            qemu_cmd_pretty += f' {element.split("/")[-1]}'
         else:
-            qemu_cmd_pretty += f" {element}"
-    print(f"$ {qemu_cmd_pretty.strip()}", flush=True)
+            bios = 'default'
+        self._qemu_args += ['-bios', bios, '-M', 'virt']
 
 
-def launch_qemu(cfg):
-    """
-    Runs the QEMU command generated from get_qemu_args(), depending on whether
-    or not the user wants to debug with GDB.
+class S390QEMURunner(QEMURunner):
 
-    If debugging with GDB, QEMU is called with '-s -S' in the background then
-    gdb_bin is called against 'vmlinux' connected to the target remote. This
-    can be repeated multiple times.
+    def __init__(self):
+        super().__init__()
 
-    Otherwise, QEMU is called with 'timeout' so that it is terminated if there
-    is a problem while booting, passing along any error code that is returned.
+        self._default_kernel_path = Path('arch/s390/boot/bzImage')
+        self._initrd_arch = 's390'
+        self._qemu_arch = 's390x'
+        self._qemu_args += ['-M', 's390-ccw-virtio']
 
-    Parameters:
-        cfg (dict): The configuration dictionary generated with setup_cfg().
-    """
-    interactive = cfg["interactive"]
-    gdb = cfg["gdb"]
-    gdb_bin = cfg["gdb_bin"]
-    kernel_location = cfg["kernel_location"]
-    qemu_cmd = cfg["qemu_cmd"]
-    timeout = cfg["timeout"]
 
-    # Print information about the QEMU binary
-    pretty_print_qemu_info(qemu_cmd[0])
+class X86QEMURunner(QEMURunner):
 
-    if gdb:
-        utils.check_cmd(gdb_bin)
-        qemu_cmd += ["-s", "-S"]
+    def __init__(self):
+        super().__init__()
 
-        while True:
-            utils.check_cmd("lsof")
-            lsof = subprocess.run(["lsof", "-i:1234"],
-                                  stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL,
-                                  check=False)
-            if lsof.returncode == 0:
-                utils.die("Port 1234 is already in use, is QEMU running?")
+        self.cmdline += ['console=ttyS0', 'earlycon=uart8250,io,0x3f8']
+        self.use_kvm = platform.machine() == 'x86_64' and \
+                       self._have_dev_kvm_access()
 
-            utils.green("Starting QEMU with GDB connection on port 1234...")
-            with subprocess.Popen(qemu_cmd,
-                                  preexec_fn=os.setpgrp) as qemu_process:
-                utils.green("Starting GDB...")
-                gdb_cmd = [gdb_bin]
-                gdb_cmd += [kernel_location.joinpath("vmlinux")]
-                gdb_cmd += ["-ex", "target remote :1234"]
+        self._default_kernel_path = Path('arch/x86/boot/bzImage')
+        self._initrd_arch = 'x86'
+        self._qemu_arch = 'i386'
 
-                with subprocess.Popen(gdb_cmd) as gdb_process, \
-                     contextlib.suppress(KeyboardInterrupt):
-                    gdb_process.wait()
+    def run(self):
+        if self.use_kvm and not self.efi:
+            # There are a lot of messages along the line of
+            # "Invalid read at addr 0xFED40000, size 1, region '(null)', reason: rejected"
+            # with EFI, so do not bother.
+            self._qemu_args += ['-d', 'unimp,guest_errors']
 
-                utils.red("Killing QEMU...")
-                qemu_process.kill()
+        super().run()
 
-            answer = input("Re-run QEMU + gdb? [y/n] ")
-            if answer.lower() == "n":
-                break
-    else:
-        qemu_cmd += ["-serial", "mon:stdio"]
 
-        if not interactive:
-            timeout_cmd = ["timeout", "--foreground", timeout]
-            stdbuf_cmd = ["stdbuf", "-oL", "-eL"]
-            qemu_cmd = timeout_cmd + stdbuf_cmd + qemu_cmd
+class X8664QEMURunner(X86QEMURunner):
 
-        pretty_print_qemu_cmd(qemu_cmd)
-        try:
-            subprocess.run(qemu_cmd, check=True)
-        except subprocess.CalledProcessError as ex:
-            if ex.returncode == 124:
-                utils.red("ERROR: QEMU timed out!")
-            else:
-                utils.red("ERROR: QEMU did not exit cleanly!")
-            sys.exit(ex.returncode)
+    def __init__(self):
+        super().__init__()
+
+        self.supports_efi = True
+
+        self._initrd_arch = self._qemu_arch = 'x86_64'
+
+    def run(self):
+        if not self.use_kvm:
+            self._qemu_args += ['-cpu', 'Nehalem']
+
+        if self.efi:
+            usr_share = Path('/usr/share')
+            ovmf_locations = [
+                Path('edk2/x64/OVMF_CODE.fd'),  # Arch Linux (current), Fedora
+                Path('edk2-ovmf/x64/OVMF_CODE.fd'),  # Arch Linux (old)
+                Path('OVMF/OVMF_CODE.fd'),  # Debian and Ubuntu
+            ]
+            self._efi_img = utils.find_first_file(usr_share, ovmf_locations)
+
+            ovmf_vars_locations = [
+                Path('edk2/x64/OVMF_VARS.fd'),  # Arch Linux and Fedora
+                Path('OVMF/OVMF_VARS.fd'),  # Debian and Ubuntu
+            ]
+            ovmf_vars = utils.find_first_file(usr_share, ovmf_vars_locations)
+            self._efi_vars = Path(BOOT_UTILS, 'images', self.initrd_arch,
+                                  ovmf_vars.name)
+            # This file is in /usr/share, so it must be copied in order to be
+            # modified.
+            shutil.copyfile(ovmf_vars, self._efi_vars)
+
+        super().run()
+
+
+def parse_arguments():
+    parser = ArgumentParser(description='Boot a Linux kernel in QEMU')
+
+    parser.add_argument(
+        '-a',
+        '--architecture',
+        choices=SUPPORTED_ARCHES,
+        help='The architecture to boot. Possible values are: %(choices)s',
+        metavar='ARCH',
+        required=True)
+    parser.add_argument('--efi',
+                        action='store_true',
+                        help='Boot kernel via UEFI (x86_64 only)')
+    parser.add_argument(
+        '-g',
+        '--gdb',
+        action='store_true',
+        help="Start QEMU with '-s -S' then launch gdb on 'vmlinux'")
+    parser.add_argument(
+        '--gdb-bin',
+        default='gdb-multiarch',
+        help='gdb binary to use for debugging (default: gdb-multiarch)')
+    parser.add_argument(
+        '-k',
+        '--kernel-location',
+        required=True,
+        help='Absolute or relative path to kernel image or build folder.')
+    parser.add_argument('--append',
+                        help='Append items to kernel cmdline',
+                        nargs='+')
+    parser.add_argument(
+        '--no-kvm',
+        action='store_true',
+        help='Do not use KVM for accelration even when supported.')
+    parser.add_argument(
+        '-i',
+        '--interactive',
+        '--shell',
+        action='store_true',
+        help='Instead of immediately shutting down machine, spawn a shell.')
+    parser.add_argument(
+        '-s',
+        '--smp',
+        type=int,
+        help=
+        'Number of processors for virtual machine (default: only KVM machines will use multiple vCPUs.)',
+    )
+    parser.add_argument('-t',
+                        '--timeout',
+                        default='3m',
+                        help="Value to pass to 'timeout' (default: '3m')")
+
+    return parser.parse_args()
 
 
 if __name__ == '__main__':
-    arguments = parse_arguments()
+    args = parse_arguments()
 
-    # Build configuration from arguments and QEMU flags
-    config = setup_cfg(arguments)
-    config = get_qemu_args(config)
+    arch_to_runner = {
+        'arm': ARMV7QEMURunner,
+        'arm32_v5': ARMV5QEMURunner,
+        'arm32_v6': ARMV6QEMURunner,
+        'arm32_v7': ARMV7QEMURunner,
+        'arm64': ARM64QEMURunner,
+        'arm64be': ARM64BEQEMURunner,
+        'm68k': M68KQEMURunner,
+        'mips': MIPSQEMURunner,
+        'mipsel': MIPSELQEMURunner,
+        'ppc32': PowerPC32QEMURunner,
+        'ppc32_mac': PowerPC32MacQEMURunner,
+        'ppc64': PowerPC64QEMURunner,
+        'ppc64le': PowerPC64LEQEMURunner,
+        'riscv': RISCVQEMURunner,
+        's390': S390QEMURunner,
+        'x86': X86QEMURunner,
+        'x86_64': X8664QEMURunner,
+    }
+    runner = arch_to_runner[args.architecture]()
 
-    launch_qemu(config)
+    if not (kernel_location := Path(args.kernel_location).resolve()).exists():
+        raise FileNotFoundError(
+            f"Supplied kernel location ('{kernel_location}') does not exist!")
+    if kernel_location.is_file():
+        if args.gdb and kernel_location.name != 'vmlinux':
+            raise RuntimeError(
+                'Debugging with gdb requires a kernel build folder to locate vmlinux',
+            )
+        runner.kernel = kernel_location
+    else:
+        runner.kernel_dir = kernel_location
+
+    if args.append:
+        runner.cmdline += args.append
+
+    if args.efi:
+        runner.efi = runner.supports_efi
+        if not runner.efi:
+            utils.yellow(
+                f"EFI boot requested on unsupported architecture ('{args.architecture}'), ignoring..."
+            )
+
+    if args.gdb:
+        runner.gdb = True
+        runner.gdb_bin = args.gdb_bin
+
+    if args.no_kvm:
+        runner.use_kvm = False
+
+    if args.smp:
+        runner.smp = args.smp
+
+    runner.interactive = args.interactive
+    runner.timeout = args.timeout
+
+    runner.run()
