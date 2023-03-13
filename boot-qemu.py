@@ -48,6 +48,7 @@ class QEMURunner:
         self.interactive = False
         self.kernel = None
         self.kernel_dir = None
+        self.supports_efi = False
         # It may be tempting to use self.use_kvm during initialization of
         # subclasses to set certain properties but the user can explicitly opt
         # out of KVM after instantiation, so any decisions based on it should
@@ -318,9 +319,6 @@ class QEMURunner:
 
             self._run_fg()
 
-    def supports_efi(self):
-        return False
-
 
 class ARMQEMURunner(QEMURunner):
 
@@ -395,6 +393,7 @@ class ARM64QEMURunner(QEMURunner):
         super().__init__()
 
         self.cmdline += ['console=ttyAMA0', 'earlycon']
+        self.supports_efi = True
 
         self._default_kernel_path = Path('arch/arm64/boot/Image.gz')
         self._initrd_arch = 'arm64'
@@ -461,19 +460,15 @@ class ARM64QEMURunner(QEMURunner):
 
         super().run()
 
-    def supports_efi(self):
-        return True
-
 
 class ARM64BEQEMURunner(ARM64QEMURunner):
 
     def __init__(self):
         super().__init__()
 
-        self._initrd_arch = 'arm64be'
+        self.supports_efi = False
 
-    def supports_efi(self):
-        return False
+        self._initrd_arch = 'arm64be'
 
 
 class M68KQEMURunner(QEMURunner):
@@ -623,10 +618,9 @@ class X8664QEMURunner(X86QEMURunner):
     def __init__(self):
         super().__init__()
 
-        self._initrd_arch = self._qemu_arch = 'x86_64'
+        self.supports_efi = True
 
-    def supports_efi(self):
-        return True
+        self._initrd_arch = self._qemu_arch = 'x86_64'
 
     def run(self):
         if not self.use_kvm:
@@ -748,7 +742,7 @@ if __name__ == '__main__':
         runner.cmdline += args.append
 
     if args.efi:
-        runner.efi = runner.supports_efi()
+        runner.efi = runner.supports_efi
         if not runner.efi:
             utils.yellow(
                 f"EFI boot requested on unsupported architecture ('{args.architecture}'), ignoring..."
