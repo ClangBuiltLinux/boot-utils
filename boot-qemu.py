@@ -3,6 +3,7 @@
 
 from argparse import ArgumentParser
 import contextlib
+import grp
 import os
 from pathlib import Path
 import platform
@@ -14,6 +15,7 @@ import sys
 
 import utils
 
+SHARED_FOLDER = Path(utils.BOOT_UTILS, 'shared')
 SUPPORTED_ARCHES = [
     'arm',
     'arm32_v5',
@@ -40,7 +42,7 @@ class QEMURunner:
 
     def __init__(self):
 
-        # Properties that can be adjusted by the user or class
+        # Properties that can be adjusted by the user or class (keep alphabetized if possible)
         self.cmdline = []
         self.efi = False
         self.gdb = False
@@ -51,14 +53,15 @@ class QEMURunner:
         self.kernel_config = None
         self.kernel_dir = None
         self.memory = '512m'
+        self.share_folder_with_guest = False
+        self.smp = 0
         self.supports_efi = False
+        self.timeout = ''
         # It may be tempting to use self.use_kvm during initialization of
         # subclasses to set certain properties but the user can explicitly opt
         # out of KVM after instantiation, so any decisions based on it should
         # be confined to run().
         self.use_kvm = False
-        self.smp = 0
-        self.timeout = ''
 
         self._default_kernel_path = None
         self._dtbs = []
@@ -72,6 +75,14 @@ class QEMURunner:
             '-nodefaults',
         ]  # yapf: disable
         self._qemu_path = None
+        self._vfsd_conf = {
+            'cmd': [],
+            'files': {
+                'log': Path(utils.BOOT_UTILS, '.vfsd.log'),
+                'mem': Path(utils.BOOT_UTILS, '.vfsd.mem'),
+                'sock': Path(utils.BOOT_UTILS, '.vfsd.sock'),
+            },
+        }
 
     def _find_dtb(self):
         if not self._dtbs:
@@ -173,6 +184,65 @@ class QEMURunner:
     def _have_dev_kvm_access(self):
         return os.access('/dev/kvm', os.R_OK | os.W_OK)
 
+    def _prepare_for_shared_folder(self):
+        if self._get_kernel_config_val('CONFIG_VIRTIO_FS') != 'y':
+            utils.yellow(
+                'CONFIG_VIRTIO_FS may not be enabled in your configuration, shared folder may not work...'
+            )
+
+        # Print information about using shared folder
+        utils.green('To mount shared folder in guest (e.g. to /mnt/shared):')
+        utils.green('\t/ # mkdir /mnt/shared')
+        utils.green('\t/ # mount -t virtiofs shared /mnt/shared')
+
+        SHARED_FOLDER.mkdir(exist_ok=True, parents=True)
+
+        # Make sure sudo is available and we have permission to use it
+        if not (sudo := shutil.which('sudo')):
+            raise FileNotFoundError(
+                'sudo is required to use virtiofsd but it could not be found!')
+        utils.green(
+            'Requesting sudo permission to run virtiofsd in the background...')
+        subprocess.run([sudo, 'true'], check=True)
+
+        # There are two implementations of virtiofsd. The original C
+        # implementation was bundled and built with QEMU up until 8.0, where it
+        # was removed after being deprecated in 7.0:
+        #
+        # https://lore.kernel.org/20230216182628.126139-1-dgilbert@redhat.com/
+        #
+        # The standalone Rust implementation is preferred now, which should be
+        # available in PATH. If it is not available, see if there is a C
+        # implementation available in QEMU's prefix.
+        if not (virtiofsd := shutil.which('virtiofsd')):
+            utils.yellow(
+                'Could not find Rust implementation of virtiofsd (https://gitlab.com/virtio-fs/virtiofsd), searching for old C implementation...'
+            )
+
+            qemu_prefix = self._qemu_path.resolve().parents[1]
+            virtiofsd_locations = [
+                Path('libexec/virtiofsd'),  # Default QEMU installation, Fedora
+                Path('lib/qemu/virtiofsd'),  # Arch Linux, Debian, Ubuntu
+            ]
+            virtiofsd = utils.find_first_file(qemu_prefix, virtiofsd_locations)
+
+        # Prepare QEMU arguments
+        self._qemu_args += [
+            '-chardev', f"socket,id=char0,path={self._vfsd_conf['files']['sock']}",
+            '-device', 'vhost-user-fs-pci,queue-size=1024,chardev=char0,tag=shared',
+            '-object', f"memory-backend-file,id=shm,mem-path={self._vfsd_conf['files']['mem']},share=on,size={self.memory}",
+            '-numa', 'node,memdev=shm',
+        ]  # yapf: disable
+
+        self._vfsd_conf['cmd'] = [
+            sudo,
+            virtiofsd,
+            f"--socket-group={grp.getgrgid(os.getgid()).gr_name}",
+            f"--socket-path={self._vfsd_conf['files']['sock']}",
+            '-o', f"source={SHARED_FOLDER}",
+            '-o', 'cache=always',
+        ]  # yapf: disable
+
     def _prepare_initrd(self):
         if not self._initrd_arch:
             raise RuntimeError('No initrd architecture specified?')
@@ -180,6 +250,9 @@ class QEMURunner:
                                     gh_json_file=self.gh_json_file)
 
     def _run_fg(self):
+        if self.share_folder_with_guest:
+            self._prepare_for_shared_folder()
+
         # Pretty print and run QEMU command
         qemu_cmd = []
 
@@ -192,15 +265,32 @@ class QEMURunner:
 
         qemu_cmd += [self._qemu_path, *self._qemu_args]
 
-        print(f"$ {' '.join(shlex.quote(str(elem)) for elem in qemu_cmd)}")
-        try:
-            subprocess.run(qemu_cmd, check=True)
-        except subprocess.CalledProcessError as err:
-            if err.returncode == 124:
-                utils.red("ERROR: QEMU timed out!")
-            else:
-                utils.red("ERROR: QEMU did not exit cleanly!")
-            sys.exit(err.returncode)
+        print(f"\n$ {' '.join(shlex.quote(str(elem)) for elem in qemu_cmd)}")
+        null_cm = contextlib.nullcontext()
+        with self._vfsd_conf['files']['log'].open('w', encoding='utf-8') if self.share_folder_with_guest else null_cm as vfsd_log, \
+            subprocess.Popen(self._vfsd_conf['cmd'], stderr=vfsd_log, stdout=vfsd_log) if self.share_folder_with_guest else null_cm as vfsd_proc:
+            try:
+                subprocess.run(qemu_cmd, check=True)
+            except subprocess.CalledProcessError as err:
+                if err.returncode == 124:
+                    utils.red("ERROR: QEMU timed out!")
+                else:
+                    utils.red("ERROR: QEMU did not exit cleanly!")
+                    # If virtiofsd is dead, it is pretty likely that it was the
+                    # cause of QEMU failing so add to the existing exception using
+                    # 'from'.
+                    if vfsd_proc and vfsd_proc.poll():
+                        # yapf: disable
+                        vfsd_log_txt = self._vfsd_conf['files']['log'].read_text(encoding='utf-8')
+                        raise RuntimeError(f"virtiofsd failed with: {vfsd_log_txt}") from err
+                        # yapf: enable
+                sys.exit(err.returncode)
+            finally:
+                if vfsd_proc:
+                    vfsd_proc.kill()
+                    # Delete the memory to save space, it does not have to be
+                    # persistent
+                    self._vfsd_conf['files']['mem'].unlink(missing_ok=True)
 
     def _run_gdb(self):
         qemu_cmd = [self._qemu_path, *self._qemu_args]
@@ -846,6 +936,12 @@ def parse_arguments():
         help=
         'Number of processors for virtual machine (default: only KVM machines will use multiple vCPUs.)',
     )
+    parser.add_argument(
+        '--share-folder-with-guest',
+        action='store_true',
+        help=
+        f"Share {SHARED_FOLDER} with the guest using virtiofs (requires interactive, not supported with gdb).",
+    )
     parser.add_argument('-t',
                         '--timeout',
                         default='3m',
@@ -917,6 +1013,18 @@ if __name__ == '__main__':
 
     if args.no_kvm:
         runner.use_kvm = False
+
+    if args.share_folder_with_guest:
+        if args.gdb:
+            utils.yellow(
+                'Shared folder requested during a debugging session, ignoring...'
+            )
+        elif not args.interactive:
+            utils.yellow(
+                'Shared folder requested without an interactive session, ignoring...'
+            )
+        else:
+            runner.share_folder_with_guest = True
 
     if args.smp:
         runner.smp = args.smp
