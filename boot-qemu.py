@@ -53,7 +53,7 @@ class QEMURunner:
         # subclasses to set certain properties but the user can explicitly opt
         # out of KVM after instantiation, so any decisions based on it should
         # be confined to run().
-        self.use_kvm = self._can_use_kvm()
+        self.use_kvm = False
         self.smp = 0
         self.timeout = ''
 
@@ -71,9 +71,6 @@ class QEMURunner:
         ]  # yapf: disable
         self._qemu_path = None
         self._ram = '512m'
-
-    def _can_use_kvm(self):
-        return False
 
     def _find_dtb(self):
         if not self._dtb:
@@ -360,6 +357,8 @@ class ARMV7QEMURunner(ARMQEMURunner):
     def __init__(self):
         super().__init__()
 
+        self.use_kvm = self._can_use_kvm()
+
         self.cmdline += ['console=ttyAMA0', 'earlycon']
 
     def _can_use_kvm(self):
@@ -394,13 +393,12 @@ class ARM64QEMURunner(QEMURunner):
 
         self.cmdline += ['console=ttyAMA0', 'earlycon']
         self.supports_efi = True
+        self.use_kvm = platform.machine() == 'aarch64' and \
+                       self._have_dev_kvm_access()
 
         self._default_kernel_path = Path('arch/arm64/boot/Image.gz')
         self._initrd_arch = 'arm64'
         self._qemu_arch = 'aarch64'
-
-    def _can_use_kvm(self):
-        return platform.machine() == 'aarch64' and self._have_dev_kvm_access()
 
     def _get_cpu_val(self):
         cpu = ['max']
@@ -605,13 +603,12 @@ class X86QEMURunner(QEMURunner):
         super().__init__()
 
         self.cmdline += ['console=ttyS0', 'earlycon=uart8250,io,0x3f8']
+        self.use_kvm = platform.machine() == 'x86_64' and \
+                       self._have_dev_kvm_access()
 
         self._default_kernel_path = Path('arch/x86/boot/bzImage')
         self._initrd_arch = 'x86'
         self._qemu_arch = 'i386'
-
-    def _can_use_kvm(self):
-        return platform.machine() == 'x86_64' and self._have_dev_kvm_access()
 
     def run(self):
         if self.use_kvm and not self.efi:
