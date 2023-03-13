@@ -445,7 +445,7 @@ class ARM64QEMURunner(QEMURunner):
         with self._efi_img.open(mode='r+b') as file:
             file.truncate(efi_img_size)
 
-        self._efi_vars = self._efi_img.with_stem('efivars')
+        self._efi_vars = self._efi_img.with_name('efivars.img')
         self._efi_vars.unlink(missing_ok=True)
         with self._efi_vars.open(mode='xb') as file:
             file.truncate(efi_img_size)
