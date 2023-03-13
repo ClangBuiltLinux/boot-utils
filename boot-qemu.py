@@ -406,6 +406,7 @@ class ARM64QEMURunner(QEMURunner):
         cpu = ['max']
 
         self._set_qemu_path()
+        # See the two gitlab links below for more details
         if (qemu_ver := self._get_qemu_ver_tuple()) >= (6, 2, 50):
             self._set_kernel_vars()
             kernel_ver = self._get_kernel_ver_tuple('gzip')
