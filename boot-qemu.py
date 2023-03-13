@@ -751,7 +751,7 @@ if __name__ == '__main__':
         runner.efi = runner.supports_efi()
         if not runner.efi:
             utils.yellow(
-                f"EFI boot requested on unsupported architecture ('{args.architecture}'), ignoring...",
+                f"EFI boot requested on unsupported architecture ('{args.architecture}'), ignoring..."
             )
 
     if args.gdb:
