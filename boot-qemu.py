@@ -402,29 +402,59 @@ class ARM64QEMURunner(QEMURunner):
     def _can_use_kvm(self):
         return platform.machine() == 'aarch64' and self._have_dev_kvm_access()
 
+    def _get_cpu_val(self):
+        cpu = ['max']
+
+        self._set_qemu_path()
+        if (qemu_ver := self._get_qemu_ver_tuple()) >= (6, 2, 50):
+            self._set_kernel_vars()
+            kernel_ver = self._get_kernel_ver_tuple('gzip')
+
+            # https://gitlab.com/qemu-project/qemu/-/issues/964
+            if kernel_ver < (4, 16, 0):
+                cpu = ['cortex-a72']
+            # https://gitlab.com/qemu-project/qemu/-/commit/69b2265d5fe8e0f401d75e175e0a243a7d505e53
+            elif kernel_ver < (5, 12, 0):
+                cpu.append('lpa2=off')
+
+        # https://lore.kernel.org/YlgVa+AP0g4IYvzN@lakrids/
+        if 'max' in cpu and qemu_ver >= (6, 0, 0):
+            cpu.append('pauth-impdef=true')
+
+        return cpu
+
+    def _setup_efi(self):
+        # Sizing the images to 64M is recommended by "Prepare the firmware" section at
+        # https://mirrors.edge.kernel.org/pub/linux/kernel/people/will/docs/qemu/qemu-arm64-howto.html
+        efi_img_size = 64 * 1024 * 1024  # 64M
+
+        usr_share = Path('/usr/share')
+
+        aavmf_locations = [
+            Path('edk2/aarch64/QEMU_EFI.silent.fd'),  # Fedora
+            Path('edk2/aarch64/QEMU_EFI.fd'),  # Arch Linux (current)
+            Path('edk2-armvirt/aarch64/QEMU_EFI.fd'),  # Arch Linux (old)
+            Path('qemu-efi-aarch64/QEMU_EFI.fd'),  # Debian and Ubuntu
+        ]
+        aavmf = utils.find_first_file(usr_share, aavmf_locations)
+
+        self._efi_img = Path(BOOT_UTILS, 'images', self._initrd_arch,
+                             'efi.img')
+        shutil.copyfile(aavmf, self._efi_img)
+        with self._efi_img.open(mode='r+b') as file:
+            file.truncate(efi_img_size)
+
+        self._efi_vars = self._efi_img.with_stem('efivars')
+        self._efi_vars.unlink(missing_ok=True)
+        with self._efi_vars.open(mode='xb') as file:
+            file.truncate(efi_img_size)
+
     def run(self):
         machine = ['virt', 'gic-version=max']
 
         if not self.use_kvm:
-            cpu = ['max']
-
-            self._set_qemu_path()
-            if (qemu_ver := self._get_qemu_ver_tuple()) >= (6, 2, 50):
-                self._set_kernel_vars()
-                kernel_ver = self._get_kernel_ver_tuple('gzip')
-
-                # https://gitlab.com/qemu-project/qemu/-/issues/964
-                if kernel_ver < (4, 16, 0):
-                    cpu = ['cortex-a72']
-                # https://gitlab.com/qemu-project/qemu/-/commit/69b2265d5fe8e0f401d75e175e0a243a7d505e53
-                elif kernel_ver < (5, 12, 0):
-                    cpu.append('lpa2=off')
-
-            # https://lore.kernel.org/YlgVa+AP0g4IYvzN@lakrids/
-            if 'max' in cpu and qemu_ver >= (6, 0, 0):
-                cpu.append('pauth-impdef=true')
-
-            self._qemu_args += ['-cpu', ','.join(cpu)]
+            cpu_val = self._get_cpu_val()
+            self._qemu_args += ['-cpu', ','.join(cpu_val)]
 
             # Boot with VHE emulation, which allows the kernel to run at EL2.
             # KVM does not emulate VHE, so this cannot be unconditional.
@@ -433,30 +463,7 @@ class ARM64QEMURunner(QEMURunner):
         self._qemu_args += ['-machine', ','.join(machine)]
 
         if self.efi:
-            # Sizing the images to 64M is recommended by "Prepare the firmware" section at
-            # https://mirrors.edge.kernel.org/pub/linux/kernel/people/will/docs/qemu/qemu-arm64-howto.html
-            efi_img_size = 64 * 1024 * 1024  # 64M
-
-            usr_share = Path('/usr/share')
-
-            aavmf_locations = [
-                Path('edk2/aarch64/QEMU_EFI.silent.fd'),  # Fedora
-                Path('edk2/aarch64/QEMU_EFI.fd'),  # Arch Linux (current)
-                Path('edk2-armvirt/aarch64/QEMU_EFI.fd'),  # Arch Linux (old)
-                Path('qemu-efi-aarch64/QEMU_EFI.fd'),  # Debian and Ubuntu
-            ]
-            aavmf = utils.find_first_file(usr_share, aavmf_locations)
-
-            self._efi_img = Path(BOOT_UTILS, 'images', self._initrd_arch,
-                                 'efi.img')
-            shutil.copyfile(aavmf, self._efi_img)
-            with self._efi_img.open(mode='r+b') as file:
-                file.truncate(efi_img_size)
-
-            self._efi_vars = self._efi_img.with_stem('efivars')
-            self._efi_vars.unlink(missing_ok=True)
-            with self._efi_vars.open(mode='xb') as file:
-                file.truncate(efi_img_size)
+            self._setup_efi()
 
         super().run()
 
