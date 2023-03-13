@@ -249,20 +249,11 @@ class QEMURunner:
             raise RuntimeError('No default kernel path specified?')
 
         possible_kernel_locations = {
-            Path(self.kernel_dir,
-                 self._default_kernel_path),  # default (kbuild)
-            Path(self.kernel_dir, self._default_kernel_path.name),  # tuxmake
+            Path(self._default_kernel_path),  # default (kbuild)
+            Path(self._default_kernel_path.name),  # tuxmake
         }
-        for loc in possible_kernel_locations:
-            if loc.exists():
-                self.kernel = loc
-                break
-        if not self.kernel:
-            possible_locations = "', '".join(
-                str(path) for path in possible_kernel_locations)
-            raise FileNotFoundError(
-                f"{self._default_kernel_path.name} could not be found at possible locations ('{possible_locations}')",
-            )
+        self.kernel = utils.find_first_file(self.kernel_dir,
+                                            possible_kernel_locations)
 
     def _set_qemu_path(self):
         if self._qemu_path:
