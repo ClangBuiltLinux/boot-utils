@@ -441,6 +441,8 @@ class ARM64QEMURunner(QEMURunner):
 
         self._efi_img = Path(BOOT_UTILS, 'images', self._initrd_arch,
                              'efi.img')
+        # This file is in /usr/share, so it must be copied in order to be
+        # modified.
         shutil.copyfile(aavmf, self._efi_img)
         with self._efi_img.open(mode='r+b') as file:
             file.truncate(efi_img_size)
@@ -650,6 +652,8 @@ class X8664QEMURunner(X86QEMURunner):
             ovmf_vars = utils.find_first_file(usr_share, ovmf_vars_locations)
             self._efi_vars = Path(BOOT_UTILS, 'images', self.initrd_arch,
                                   ovmf_vars.name)
+            # This file is in /usr/share, so it must be copied in order to be
+            # modified.
             shutil.copyfile(ovmf_vars, self._efi_vars)
 
         super().run()
