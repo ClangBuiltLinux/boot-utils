@@ -284,7 +284,7 @@ class QEMURunner:
             ]  # yapf: disable
 
         # Kernel options
-        if self.interactive:
+        if self.interactive or args.gdb:
             self.cmdline.append('rdinit=/bin/sh')
         if self.gdb:
             self.cmdline.append('nokaslr')
@@ -758,7 +758,7 @@ if __name__ == '__main__':
     if args.smp:
         runner.smp = args.smp
 
-    runner.interactive = args.interactive or args.gdb
+    runner.interactive = args.interactive
     runner.timeout = args.timeout
 
     runner.run()
