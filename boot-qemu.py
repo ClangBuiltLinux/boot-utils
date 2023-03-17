@@ -67,7 +67,6 @@ class QEMURunner:
         self._qemu_args = [
             '-display', 'none',
             '-nodefaults',
-            '-no-reboot',
         ]  # yapf: disable
         self._qemu_path = None
         self._ram = '512m'
@@ -325,6 +324,7 @@ class ARMQEMURunner(QEMURunner):
         self._default_kernel_path = Path('arch/arm/boot/zImage')
         self._initrd_arch = self._qemu_arch = 'arm'
         self._machine = 'virt'
+        self._qemu_args.append('-no-reboot')
 
     def run(self):
         self._qemu_args += ['-machine', self._machine]
@@ -487,7 +487,11 @@ class M68KQEMURunner(QEMURunner):
         self.cmdline.append('console=ttyS0,115200')
         self._default_kernel_path = Path('vmlinux')
         self._initrd_arch = self._qemu_arch = 'm68k'
-        self._qemu_args += ['-cpu', 'm68040', '-M', 'q800']
+        self._qemu_args += [
+            '-cpu', 'm68040',
+            '-M', 'q800',
+            '-no-reboot',
+        ]  # yapf: disable
 
 
 class MIPSQEMURunner(QEMURunner):
@@ -518,6 +522,7 @@ class PowerPC32QEMURunner(QEMURunner):
         self._initrd_arch = 'ppc32'
         self._machine = 'bamboo'
         self._qemu_arch = 'ppc'
+        self._qemu_args.append('-no-reboot')
         self._ram = '128m'
 
     def run(self):
