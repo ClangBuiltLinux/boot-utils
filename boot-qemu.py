@@ -212,9 +212,11 @@ class QEMURunner:
         # https://lore.kernel.org/20230216182628.126139-1-dgilbert@redhat.com/
         #
         # The standalone Rust implementation is preferred now, which should be
-        # available in PATH. If it is not available, see if there is a C
-        # implementation available in QEMU's prefix.
-        if not (virtiofsd := shutil.which('virtiofsd')):
+        # available in PATH or at '/usr/lib/virtiofsd', in the case of Arch
+        # Linux. If it is not available, see if there is a C implementation
+        # available in QEMU's prefix.
+        if not ((virtiofsd := shutil.which('virtiofsd')) or
+                (virtiofsd := Path('/usr/lib/virtiofsd')).exists()):
             utils.yellow(
                 'Could not find Rust implementation of virtiofsd (https://gitlab.com/virtio-fs/virtiofsd), searching for old C implementation...'
             )
