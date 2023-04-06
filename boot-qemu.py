@@ -661,6 +661,69 @@ class X8664QEMURunner(X86QEMURunner):
         super().run()
 
 
+def guess_arch(kernel_arg):
+    # kernel_arg is either a path to the kernel build folder or a full kernel
+    # location. If it is a file, we need to strip off the basename so that we
+    # can easily navigate around with '..'.
+    if (kernel_dir := kernel_arg).is_file():
+        kernel_dir = kernel_dir.parent
+
+    # If kernel_location is the kernel build folder, vmlinux will be at
+    # <kernel_dir>/vmlinux
+    #
+    # If kernel_location is a full kernel location, it could either be:
+    #   * <kernel_dir>/vmlinux (if the image is vmlinux)
+    #   * <kernel_dir>/../../../vmlinux (if the image is in arch/*/boot/)
+    #
+    # Note: 'required=False' just to provide our own exception.
+    vmlinux_locations = ['vmlinux', '../../../vmlinux']
+    if not (vmlinux := utils.find_first_file(
+            kernel_dir, vmlinux_locations, required=False)):
+        raise RuntimeError(
+            'Architecture was not provided and vmlinux could not be found!')
+
+    if not (file := shutil.which('file')):
+        raise RuntimeError(
+            "Architecture was not provided and 'file' is not installed!")
+
+    # Get output of file
+    file_out = subprocess.run([file, vmlinux],
+                              capture_output=True,
+                              check=True,
+                              text=True).stdout.strip()
+
+    # Unfortunately, 'file' is not terribly precise when it comes to
+    # microarchitecture or architecture revisions. As such, there are certain
+    # strings that are just ambiguous so we bail out and let the user tell us
+    # exactly what architecture they were hoping to boot.
+    file_rosetta = {
+        'ELF 32-bit LSB executable, ARM, EABI5': 'ambiguous',  # could be any arm32
+        'ELF 64-bit LSB pie executable, ARM aarch64': 'arm64',
+        'ELF 64-bit MSB pie executable, ARM aarch64': 'arm64be',
+        'ELF 32-bit MSB executable, Motorola m68k, 68020': 'm68k',
+        'ELF 32-bit MSB executable, MIPS, MIPS32': 'mips',
+        'ELF 32-bit LSB executable, MIPS, MIPS32': 'mipsel',
+        'ELF 32-bit MSB executable, PowerPC': 'ambiguous',  # could be ppc32 or ppc32_mac
+        'ELF 64-bit MSB executable, 64-bit PowerPC or cisco 7500, Power ELF V1 ABI': 'ppc64',
+        'ELF 64-bit LSB executable, 64-bit PowerPC or cisco 7500, OpenPOWER ELF V2 ABI': 'ppc64le',
+        'ELF 64-bit LSB executable, UCB RISC-V': 'riscv',
+        'ELF 64-bit MSB executable, IBM S/390': 's390',
+        'ELF 32-bit LSB executable, Intel 80386': 'x86',
+        'ELF 64-bit LSB executable, x86-64': 'x86_64',
+    }  # yapf: disable
+    for string, value in file_rosetta.items():
+        if string in file_out:
+            if value == 'ambiguous':
+                raise RuntimeError(
+                    f"'{string}' found in '{file_out}' but the architecture is ambiguous, please explicitly specify it via '-a'!"
+                )
+            return value
+
+    raise RuntimeError(
+        f"Architecture could not be deduced from '{file_out}', please explicitly specify it via '-a' or add support for it to guess_arch()!"
+    )
+
+
 def parse_arguments():
     parser = ArgumentParser(description='Boot a Linux kernel in QEMU')
 
@@ -668,9 +731,9 @@ def parse_arguments():
         '-a',
         '--architecture',
         choices=SUPPORTED_ARCHES,
-        help='The architecture to boot. Possible values are: %(choices)s',
-        metavar='ARCH',
-        required=True)
+        help=
+        "The architecture to boot. If omitted, value will be guessed based on 'vmlinux' if available. Possible values are: %(choices)s",
+        metavar='ARCH')
     parser.add_argument('--efi',
                         action='store_true',
                         help='Boot kernel via UEFI (x86_64 only)')
@@ -719,6 +782,13 @@ def parse_arguments():
 if __name__ == '__main__':
     args = parse_arguments()
 
+    if not (kernel_location := Path(args.kernel_location).resolve()).exists():
+        raise FileNotFoundError(
+            f"Supplied kernel location ('{kernel_location}') does not exist!")
+
+    if not (arch := args.architecture):
+        arch = guess_arch(kernel_location)
+
     arch_to_runner = {
         'arm': ARMV7QEMURunner,
         'arm32_v5': ARMV5QEMURunner,
@@ -738,11 +808,8 @@ if __name__ == '__main__':
         'x86': X86QEMURunner,
         'x86_64': X8664QEMURunner,
     }
-    runner = arch_to_runner[args.architecture]()
+    runner = arch_to_runner[arch]()
 
-    if not (kernel_location := Path(args.kernel_location).resolve()).exists():
-        raise FileNotFoundError(
-            f"Supplied kernel location ('{kernel_location}') does not exist!")
     if kernel_location.is_file():
         if args.gdb and kernel_location.name != 'vmlinux':
             raise RuntimeError(
@@ -759,7 +826,7 @@ if __name__ == '__main__':
         runner.efi = runner.supports_efi
         if not runner.efi:
             utils.yellow(
-                f"EFI boot requested on unsupported architecture ('{args.architecture}'), ignoring..."
+                f"EFI boot requested on unsupported architecture ('{arch}'), ignoring..."
             )
 
     if args.gdb:
