@@ -684,7 +684,7 @@ def guess_arch(kernel_arg):
 
     if not (file := shutil.which('file')):
         raise RuntimeError(
-            'Architecture was not provided and file is not installed!')
+            "Architecture was not provided and 'file' is not installed!")
 
     # Get output of file
     file_out = subprocess.run([file, vmlinux],
