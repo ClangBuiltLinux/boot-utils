@@ -698,6 +698,8 @@ def guess_arch(kernel_arg):
     # exactly what architecture they were hoping to boot.
     file_rosetta = {
         'ELF 32-bit LSB executable, ARM, EABI5': 'ambiguous',  # could be any arm32
+        'ELF 64-bit LSB executable, ARM aarch64': 'arm64',
+        'ELF 64-bit MSB executable, ARM aarch64': 'arm64be',
         'ELF 64-bit LSB pie executable, ARM aarch64': 'arm64',
         'ELF 64-bit MSB pie executable, ARM aarch64': 'arm64be',
         'ELF 32-bit MSB executable, Motorola m68k, 68020': 'm68k',
