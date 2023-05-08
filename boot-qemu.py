@@ -707,6 +707,8 @@ def guess_arch(kernel_arg):
         'ELF 32-bit LSB executable, MIPS, MIPS32': 'mipsel',
         'ELF 32-bit MSB executable, PowerPC': 'ambiguous',  # could be ppc32 or ppc32_mac
         'ELF 64-bit MSB executable, 64-bit PowerPC or cisco 7500, Power ELF V1 ABI': 'ppc64',
+        'ELF 64-bit MSB executable, 64-bit PowerPC or cisco 7500, OpenPOWER ELF V2 ABI': 'ppc64',
+        'ELF 64-bit MSB pie executable, 64-bit PowerPC or cisco 7500, OpenPOWER ELF V2 ABI': 'ppc64',
         'ELF 64-bit LSB executable, 64-bit PowerPC or cisco 7500, OpenPOWER ELF V2 ABI': 'ppc64le',
         'ELF 64-bit LSB executable, UCB RISC-V': 'riscv',
         'ELF 64-bit MSB executable, IBM S/390': 's390',
