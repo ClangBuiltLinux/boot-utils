@@ -90,7 +90,7 @@ def get_full_kernel_path(kernel_location, image, arch=None):
     if not kernel.exists():
         die(f"Kernel ('{kernel}') does not exist!")
 
-    return kernel
+    return kernel.resolve()
 
 
 def green(string):
