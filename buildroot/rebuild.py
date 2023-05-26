@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from argparse import ArgumentParser
+import datetime
 import os
 from pathlib import Path
 import shutil
@@ -22,6 +23,8 @@ SUPPORTED_ARCHES = [
     'x86',
     'x86_64',
 ]
+RELEASE_TAG = datetime.datetime.now(
+    tz=datetime.timezone.utc).strftime('%Y%m%d-%H%M%S')
 ROOT_FOLDER = Path(__file__).resolve().parent
 OUT_FOLDER = Path(ROOT_FOLDER, 'out')
 SRC_FOLDER = Path(ROOT_FOLDER, 'src')
@@ -111,6 +114,19 @@ def download_buildroot_if_necessary():
         download_and_extract_buildroot()
 
 
+def release_images():
+    if not shutil.which('gh'):
+        raise RuntimeError(
+            "Could not find GitHub CLI ('gh') on your system, please install it to do releases!"
+        )
+
+    gh_cmd = [
+        'gh', '-R', 'ClangBuiltLinux/boot-utils', 'release', 'create',
+        '--generate-notes', RELEASE_TAG, *list(OUT_FOLDER.iterdir())
+    ]
+    subprocess.run(gh_cmd, check=True)
+
+
 def parse_arguments():
     parser = ArgumentParser()
 
@@ -127,6 +143,11 @@ def parse_arguments():
         '--edit-config',
         action='store_true',
         help='Edit configuration file and run savedefconfig on result')
+    parser.add_argument(
+        '-r',
+        '--release',
+        action='store_true',
+        help=f"Create a release on GitHub (tag: {RELEASE_TAG})")
 
     return parser.parse_args()
 
@@ -143,3 +164,6 @@ if __name__ == '__main__':
     download_buildroot_if_necessary()
     for arch in architectures:
         build_image(arch, args.edit_config)
+
+    if args.release:
+        release_images()
