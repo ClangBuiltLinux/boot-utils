@@ -164,7 +164,7 @@ class QEMURunner:
         if not self._initrd_arch:
             raise RuntimeError('No initrd architecture specified?')
         if not (src := Path(BOOT_UTILS, 'images', self._initrd_arch,
-                            'rootfs.cpio.zst')):
+                            'rootfs.cpio.zst')).exists():
             raise FileNotFoundError(f"initrd ('{src}') does not exist?")
 
         (dst := src.with_suffix('')).unlink(missing_ok=True)
