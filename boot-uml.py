@@ -2,12 +2,9 @@
 # pylint: disable=invalid-name
 
 import argparse
-from pathlib import Path
 import subprocess
 
 import utils
-
-base_folder = Path(__file__).resolve().parent
 
 
 def parse_arguments():
@@ -38,26 +35,6 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def decomp_rootfs():
-    """
-    Decompress and get the full path of the initial ramdisk for use with UML.
-
-    Returns:
-        rootfs (Path): rootfs Path object containing full path to rootfs.
-    """
-    rootfs = base_folder.joinpath("images", "x86_64", "rootfs.ext4")
-
-    # This could be 'rootfs.unlink(missing_ok=True)' but that was only added in Python 3.8.
-    if rootfs.exists():
-        rootfs.unlink()
-
-    utils.check_cmd("zstd")
-    subprocess.run(["zstd", "-q", "-d", f"{rootfs}.zst", "-o", rootfs],
-                   check=True)
-
-    return rootfs
-
-
 def run_kernel(kernel_image, rootfs, interactive):
     """
     Run UML command with path to rootfs and additional arguments based on user
@@ -78,5 +55,6 @@ def run_kernel(kernel_image, rootfs, interactive):
 if __name__ == '__main__':
     args = parse_arguments()
     kernel = utils.get_full_kernel_path(args.kernel_location, "linux")
+    initrd = utils.prepare_initrd('x86_64', rootfs_format='ext4')
 
-    run_kernel(kernel, decomp_rootfs(), args.interactive)
+    run_kernel(kernel, initrd, args.interactive)

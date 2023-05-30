@@ -14,7 +14,6 @@ import sys
 
 import utils
 
-BOOT_UTILS = Path(__file__).resolve().parent
 SUPPORTED_ARCHES = [
     'arm',
     'arm32_v5',
@@ -163,16 +162,7 @@ class QEMURunner:
     def _prepare_initrd(self):
         if not self._initrd_arch:
             raise RuntimeError('No initrd architecture specified?')
-        if not (src := Path(BOOT_UTILS, 'images', self._initrd_arch,
-                            'rootfs.cpio.zst')).exists():
-            raise FileNotFoundError(f"initrd ('{src}') does not exist?")
-
-        (dst := src.with_suffix('')).unlink(missing_ok=True)
-
-        utils.check_cmd('zstd')
-        subprocess.run(['zstd', '-d', src, '-o', dst, '-q'], check=True)
-
-        return dst
+        return utils.prepare_initrd(self._initrd_arch)
 
     def _run_fg(self):
         # Pretty print and run QEMU command
@@ -370,7 +360,7 @@ class ARMV7QEMURunner(ARMQEMURunner):
         # 32-bit EL1 is not supported on all cores so support for it must be
         # explicitly queried via the KVM_CHECK_EXTENSION ioctl().
         try:
-            subprocess.run(Path(BOOT_UTILS, 'utils',
+            subprocess.run(Path(utils.BOOT_UTILS, 'utils',
                                 'aarch64_32_bit_el1_supported'),
                            check=True)
         except subprocess.CalledProcessError:
@@ -437,7 +427,7 @@ class ARM64QEMURunner(QEMURunner):
         ]
         aavmf = utils.find_first_file(usr_share, aavmf_locations)
 
-        self._efi_img = Path(BOOT_UTILS, 'images', self._initrd_arch,
+        self._efi_img = Path(utils.BOOT_UTILS, 'images', self._initrd_arch,
                              'efi.img')
         # This file is in /usr/share, so it must be copied in order to be
         # modified.
@@ -652,7 +642,7 @@ class X8664QEMURunner(X86QEMURunner):
                 Path('OVMF/OVMF_VARS.fd'),  # Debian and Ubuntu
             ]
             ovmf_vars = utils.find_first_file(usr_share, ovmf_vars_locations)
-            self._efi_vars = Path(BOOT_UTILS, 'images', self.initrd_arch,
+            self._efi_vars = Path(utils.BOOT_UTILS, 'images', self.initrd_arch,
                                   ovmf_vars.name)
             # This file is in /usr/share, so it must be copied in order to be
             # modified.

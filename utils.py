@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 
+import json
+import os
 from pathlib import Path
+import subprocess
 import shutil
 import sys
+
+BOOT_UTILS = Path(__file__).resolve().parent
+REPO = 'ClangBuiltLinux/boot-utils'
 
 
 def check_cmd(cmd):
@@ -28,6 +34,36 @@ def die(string):
     """
     red(f"ERROR: {string}")
     sys.exit(1)
+
+
+def download_initrd(gh_json, local_dest):
+    """
+    Download an initial ramdisk from a GitHub release
+
+    Parameters:
+        gh_json (dict): A serialized JSON object from a repo's release endpoint
+        local_dest (Path): A Path object pointing to the local file destination
+    """
+    assets = gh_json['assets']
+    tag = gh_json['tag_name']
+    url = gh_json['url']
+
+    # Turns '<arch>/rootfs.<format>.zst' into '<arch>-rootfs.<format>.zst'
+    remote_file = '-'.join(local_dest.parts[-2:])
+
+    for asset in assets:
+        if asset['name'] == remote_file:
+            curl_cmd = [
+                'curl', '-LSs', '-o', local_dest, asset['browser_download_url']
+            ]
+            subprocess.run(curl_cmd, check=True)
+
+            # Update the '.release' file in the same folder as the download
+            local_dest.with_name('.release').write_text(tag, encoding='utf-8')
+
+            return
+
+    raise RuntimeError(f"Failed to find {remote_file} in downloads of {url}?")
 
 
 def find_first_file(relative_root, possible_files, required=True):
@@ -93,6 +129,38 @@ def get_full_kernel_path(kernel_location, image, arch=None):
     return kernel.resolve()
 
 
+def get_gh_json(endpoint):
+    """
+    Query a GitHub API endpoint.
+
+    Parameters:
+        endpoint (str): The URL of the endpoint to query.
+
+    Returns:
+        A JSON object from the result of the query.
+    """
+    curl_cmd = ['curl', '-LSs']
+    if 'GITHUB_TOKEN' in os.environ:
+        curl_cmd += [
+            '-H',
+            'Accept: application/vnd.github+json',
+            '-H',
+            f"Authorization: Bearer {os.environ['GITHUB_TOKEN']}",
+        ]
+    curl_cmd.append(endpoint)
+
+    try:
+        curl_out = subprocess.run(curl_cmd,
+                                  capture_output=True,
+                                  check=True,
+                                  text=True).stdout
+    except subprocess.CalledProcessError as err:
+        raise RuntimeError(
+            f"Failed to query GitHub API at {endpoint}: {err.stderr}") from err
+
+    return json.loads(curl_out)
+
+
 def green(string):
     """
     Prints string in bold green.
@@ -101,6 +169,52 @@ def green(string):
         string (str): String to print in bold green.
     """
     print(f"\n\033[01;32m{string}\033[0m", flush=True)
+
+
+def prepare_initrd(architecture, rootfs_format='cpio'):
+    """
+    Returns a decompressed initial ramdisk.
+
+    Parameters:
+        architecture (str): Architecture to download image for.
+        rootfs_format (str): Initrd format ('cpio' or 'ext4')
+    """
+    src = Path(BOOT_UTILS, 'images', architecture,
+               f"rootfs.{rootfs_format}.zst")
+    src.parent.mkdir(exist_ok=True, parents=True)
+
+    # First, make sure that the current user is not rate limited by GitHub,
+    # otherwise the next API call will not return valid information.
+    gh_json_rl = get_gh_json('https://api.github.com/rate_limit')
+    limit = gh_json_rl['resources']['core']['limit']
+    remaining = gh_json_rl['resources']['core']['remaining']
+
+    # If we have API calls remaining, we can query for the latest release to
+    # make sure that we are up to date.
+    if remaining > 0:
+        gh_json_rel = get_gh_json(
+            f"https://api.github.com/repos/{REPO}/releases/latest")
+        # Download the ramdisk if it is not already downloaded
+        if not src.exists():
+            download_initrd(gh_json_rel, src)
+        # If it is already downloaded, check that it is up to date and download
+        # an update only if necessary.
+        elif (rel_file := src.with_name('.release')).exists():
+            cur_rel = rel_file.read_text(encoding='utf-8')
+            latest_rel = gh_json_rel['tag_name']
+            if cur_rel != latest_rel:
+                download_initrd(gh_json_rel, src)
+    elif not src.exists():
+        raise RuntimeError(
+            f"Cannot query GitHub API for latest images release due to rate limit (remaining: {remaining}, limit: {limit}) and {src} does not exist already! "
+            'Download it manually or supply a GitHub personal access token via the GITHUB_TOKEN environment variable to make an authenticated GitHub API request.'
+        )
+
+    check_cmd('zstd')
+    (dst := src.with_suffix('')).unlink(missing_ok=True)
+    subprocess.run(['zstd', '-d', src, '-o', dst, '-q'], check=True)
+
+    return dst
 
 
 def red(string):
