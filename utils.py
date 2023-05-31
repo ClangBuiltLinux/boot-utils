@@ -187,7 +187,6 @@ def prepare_initrd(architecture, rootfs_format='cpio'):
     # First, make sure that the current user is not rate limited by GitHub,
     # otherwise the next API call will not return valid information.
     gh_json_rl = get_gh_json('https://api.github.com/rate_limit')
-    limit = gh_json_rl['resources']['core']['limit']
     remaining = gh_json_rl['resources']['core']['remaining']
 
     # If we have API calls remaining, we can query for the latest release to
@@ -206,6 +205,7 @@ def prepare_initrd(architecture, rootfs_format='cpio'):
             if cur_rel != latest_rel:
                 download_initrd(gh_json_rel, src)
     elif not src.exists():
+        limit = gh_json_rl['resources']['core']['limit']
         raise RuntimeError(
             f"Cannot query GitHub API for latest images release due to rate limit (remaining: {remaining}, limit: {limit}) and {src} does not exist already! "
             'Download it manually or supply a GitHub personal access token via the GITHUB_TOKEN environment variable to make an authenticated GitHub API request.'
