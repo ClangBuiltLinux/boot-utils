@@ -141,6 +141,7 @@ def get_gh_json(endpoint):
     """
     curl_cmd = ['curl', '-LSs']
     if 'GITHUB_TOKEN' in os.environ:
+        # https://docs.github.com/en/rest/overview/authenticating-to-the-rest-api
         curl_cmd += [
             '-H',
             'Accept: application/vnd.github+json',
