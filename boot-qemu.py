@@ -44,6 +44,7 @@ class QEMURunner:
         self.efi = False
         self.gdb = False
         self.gdb_bin = ''
+        self.gh_json_file = None
         self.interactive = False
         self.kernel = None
         self.kernel_dir = None
@@ -162,7 +163,8 @@ class QEMURunner:
     def _prepare_initrd(self):
         if not self._initrd_arch:
             raise RuntimeError('No initrd architecture specified?')
-        return utils.prepare_initrd(self._initrd_arch)
+        return utils.prepare_initrd(self._initrd_arch,
+                                    gh_json_file=self.gh_json_file)
 
     def _run_fg(self):
         # Pretty print and run QEMU command
@@ -741,6 +743,11 @@ def parse_arguments():
         default='gdb-multiarch',
         help='gdb binary to use for debugging (default: gdb-multiarch)')
     parser.add_argument(
+        '--gh-json-file',
+        help=
+        'Use file for downloading rootfs images, instead of querying GitHub API directly'
+    )
+    parser.add_argument(
         '-k',
         '--kernel-location',
         required=True,
@@ -826,6 +833,9 @@ if __name__ == '__main__':
     if args.gdb:
         runner.gdb = True
         runner.gdb_bin = args.gdb_bin
+
+    if args.gh_json_file:
+        runner.gh_json_file = Path(args.gh_json_file).resolve()
 
     if args.no_kvm:
         runner.use_kvm = False

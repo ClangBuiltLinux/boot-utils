@@ -172,7 +172,7 @@ def green(string):
     print(f"\n\033[01;32m{string}\033[0m", flush=True)
 
 
-def prepare_initrd(architecture, rootfs_format='cpio'):
+def prepare_initrd(architecture, rootfs_format='cpio', gh_json_file=None):
     """
     Returns a decompressed initial ramdisk.
 
@@ -189,11 +189,19 @@ def prepare_initrd(architecture, rootfs_format='cpio'):
     gh_json_rl = get_gh_json('https://api.github.com/rate_limit')
     remaining = gh_json_rl['resources']['core']['remaining']
 
-    # If we have API calls remaining, we can query for the latest release to
-    # make sure that we are up to date.
-    if remaining > 0:
-        gh_json_rel = get_gh_json(
-            f"https://api.github.com/repos/{REPO}/releases/latest")
+    # If we have API calls remaining or have already queried the API previously
+    # and cached the result, we can query for the latest release to make sure
+    # that we are up to date.
+    if remaining > 0 or gh_json_file:
+        if gh_json_file:
+            if not gh_json_file.exists():
+                raise FileNotFoundError(
+                    f"Provided GitHub JSON file ('{gh_json_file}') does not exist!"
+                )
+            gh_json_rel = json.loads(gh_json_file.read_text(encoding='utf-8'))
+        else:
+            gh_json_rel = get_gh_json(
+                f"https://api.github.com/repos/{REPO}/releases/latest")
         # Download the ramdisk if it is not already downloaded
         if not src.exists():
             download_initrd(gh_json_rel, src)

@@ -2,6 +2,7 @@
 # pylint: disable=invalid-name
 
 import argparse
+from pathlib import Path
 import subprocess
 
 import utils
@@ -16,6 +17,12 @@ def parse_arguments():
     """
     parser = argparse.ArgumentParser()
 
+    parser.add_argument(
+        '-g',
+        '--gh-json-file',
+        help=
+        'Use file for downloading rootfs images, instead of querying GitHub API directly'
+    )
     parser.add_argument(
         "-i",
         "--interactive",
@@ -54,7 +61,12 @@ def run_kernel(kernel_image, rootfs, interactive):
 
 if __name__ == '__main__':
     args = parse_arguments()
+
     kernel = utils.get_full_kernel_path(args.kernel_location, "linux")
-    initrd = utils.prepare_initrd('x86_64', rootfs_format='ext4')
+
+    initrd_args = {'rootfs_format': 'ext4'}
+    if args.gh_json_file:
+        initrd_args['gh_json_file'] = Path(args.gh_json_file).resolve()
+    initrd = utils.prepare_initrd('x86_64', **initrd_args)
 
     run_kernel(kernel, initrd, args.interactive)
