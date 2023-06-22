@@ -58,7 +58,7 @@ class QEMURunner:
         self.timeout = ''
 
         self._default_kernel_path = None
-        self._dtb = None
+        self._dtbs = []
         self._efi_img = None
         self._efi_vars = None
         self._initrd_arch = None
@@ -72,8 +72,8 @@ class QEMURunner:
         self._ram = '512m'
 
     def _find_dtb(self):
-        if not self._dtb:
-            raise RuntimeError('No dtb set?')
+        if not self._dtbs:
+            raise RuntimeError('No dtbs set?')
         if not self.kernel:
             raise RuntimeError('Cannot locate dtb without kernel')
 
@@ -81,12 +81,13 @@ class QEMURunner:
         # Otherwise, assume there is a 'dtbs' folder in the same folder as the
         # kernel image (tuxmake)
         dtb_dir = 'dts' if self.kernel.parent.name == 'boot' else 'dtbs'
-        if not (dtb := Path(self.kernel.parent, dtb_dir, self._dtb)).exists():
-            raise FileNotFoundError(
-                f"dtb ('{self._dtb}') is required for booting but it could not be found at expected location ('{dtb}')",
-            )
+        for dtb_loc in self._dtbs:
+            if (dtb := Path(self.kernel.parent, dtb_dir, dtb_loc)).exists():
+                return dtb
 
-        return dtb
+        raise FileNotFoundError(
+            f"dtb is required for booting but it could not be found at expected locations ('{self._dtbs}')"
+        )
 
     def _get_default_smp_value(self):
         if not self.kernel_dir:
@@ -278,7 +279,7 @@ class QEMURunner:
             self.cmdline.append('nokaslr')
         if self.cmdline:
             self._qemu_args += ['-append', ' '.join(self.cmdline)]
-        if self._dtb:
+        if self._dtbs:
             self._qemu_args += ['-dtb', self._find_dtb()]
         self._qemu_args += ['-kernel', self.kernel]
         self._qemu_args += ['-initrd', self._prepare_initrd()]
@@ -331,7 +332,9 @@ class ARMV5QEMURunner(ARMQEMURunner):
 
         self.cmdline.append('earlycon')
 
-        self._dtb = 'aspeed-bmc-opp-palmetto.dtb'
+        self._dtbs = [
+            'aspeed/aspeed-bmc-opp-palmetto.dtb', 'aspeed-bmc-opp-palmetto.dtb'
+        ]
         self._machine = 'palmetto-bmc'
 
 
@@ -340,7 +343,9 @@ class ARMV6QEMURunner(ARMQEMURunner):
     def __init__(self):
         super().__init__()
 
-        self._dtb = 'aspeed-bmc-opp-romulus.dtb'
+        self._dtbs = [
+            'aspeed/aspeed-bmc-opp-romulus.dtb', 'aspeed-bmc-opp-romulus.dtb'
+        ]
         self._machine = 'romulus-bmc'
 
 
