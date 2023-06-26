@@ -12,6 +12,7 @@ SUPPORTED_ARCHES = [
     'arm64',
     'arm64be',
     'arm',
+    'loongarch',
     'm68k',
     'mips',
     'mipsel',
