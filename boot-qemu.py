@@ -21,6 +21,7 @@ SUPPORTED_ARCHES = [
     'arm32_v7',
     'arm64',
     'arm64be',
+    'loongarch',
     'm68k',
     'mips',
     'mipsel',
@@ -476,6 +477,35 @@ class ARM64BEQEMURunner(ARM64QEMURunner):
         self._initrd_arch = 'arm64be'
 
 
+class LoongArchQEMURunner(QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self.cmdline.append('console=ttyS0,115200')
+        self._default_kernel_path = Path('arch/loongarch/boot/vmlinuz.efi')
+        self._initrd_arch = 'loongarch'
+
+        bios = Path(utils.BOOT_UTILS, 'images', self._initrd_arch,
+                    'edk2-loongarch64-code.fd')
+        if not bios.exists():
+            firmware_url = f"https://github.com/loongson/Firmware/raw/main/LoongArchVirtMachine/{bios.name}"
+            utils.green(
+                f"Downloading LoongArch firmware from {firmware_url}...")
+            curl_cmd = ['curl', '-LSs', '-o', bios, firmware_url]
+            subprocess.run(curl_cmd, check=True)
+
+        self._qemu_arch = 'loongarch64'
+        self._qemu_args += [
+            '-M', 'virt',
+            '-cpu', 'la464',
+            '-bios', bios,
+            '-no-reboot',
+        ]  # yapf: disable
+        self._ram = '2G'
+        self.smp = 2
+
+
 class M68KQEMURunner(QEMURunner):
 
     def __init__(self):
@@ -699,6 +729,7 @@ def guess_arch(kernel_arg):
         'ELF 64-bit MSB executable, ARM aarch64': 'arm64be',
         'ELF 64-bit LSB pie executable, ARM aarch64': 'arm64',
         'ELF 64-bit MSB pie executable, ARM aarch64': 'arm64be',
+        'ELF 64-bit LSB executable, LoongArch': 'loongarch',
         'ELF 32-bit MSB executable, Motorola m68k, 68020': 'm68k',
         'ELF 32-bit MSB executable, MIPS, MIPS32': 'mips',
         'ELF 32-bit LSB executable, MIPS, MIPS32': 'mipsel',
@@ -802,6 +833,7 @@ if __name__ == '__main__':
         'arm32_v7': ARMV7QEMURunner,
         'arm64': ARM64QEMURunner,
         'arm64be': ARM64BEQEMURunner,
+        'loongarch': LoongArchQEMURunner,
         'm68k': M68KQEMURunner,
         'mips': MIPSQEMURunner,
         'mipsel': MIPSELQEMURunner,

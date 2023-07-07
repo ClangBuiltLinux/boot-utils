@@ -7,11 +7,12 @@ from pathlib import Path
 import shutil
 import subprocess
 
-BUILDROOT_VERSION = '2022.02'
+BUILDROOT_VERSION = '2023.02.2'
 SUPPORTED_ARCHES = [
     'arm64',
     'arm64be',
     'arm',
+    'loongarch',
     'm68k',
     'mips',
     'mipsel',
@@ -72,16 +73,17 @@ def build_image(architecture, edit_config):
 
 
 def download_and_extract_buildroot():
+    if SRC_FOLDER.exists():
+        shutil.rmtree(SRC_FOLDER)
     SRC_FOLDER.mkdir(parents=True)
 
     tarball = Path(ROOT_FOLDER, f"buildroot-{BUILDROOT_VERSION}.tar.gz")
-    tarball.unlink(missing_ok=True)
-
-    curl_cmd = [
-        'curl', '-LSs', '-o', tarball,
-        f"https://buildroot.org/downloads/{tarball.name}"
-    ]
-    subprocess.run(curl_cmd, check=True)
+    if not tarball.exists():
+        curl_cmd = [
+            'curl', '-LSs', '-o', tarball,
+            f"https://buildroot.org/downloads/{tarball.name}"
+        ]
+        subprocess.run(curl_cmd, check=True)
 
     sha256_cmd = ['sha256sum', '--quiet', '-c', f"{tarball.name}.sha256"]
     subprocess.run(sha256_cmd, check=True, cwd=ROOT_FOLDER)
@@ -91,27 +93,18 @@ def download_and_extract_buildroot():
     ]
     subprocess.run(tar_cmd, check=True)
 
-    tarball.unlink(missing_ok=True)
-
-
-def download_buildroot_if_necessary():
-    if SRC_FOLDER.exists():
-        # Make support/scripts/setlocalversion do nothing because we are in a
-        # git repository so it will return information about this repo, not
-        # Buildroot
-        setlocalversion = Path(SRC_FOLDER, 'support/scripts/setlocalversion')
-        setlocalversion.write_text('', encoding='utf-8')
-
-        installed_version = subprocess.run(['make', 'print-version'],
-                                           capture_output=True,
-                                           check=True,
-                                           cwd=SRC_FOLDER,
-                                           text=True).stdout.strip()
-        if installed_version != BUILDROOT_VERSION:
-            shutil.rmtree(SRC_FOLDER)
-            download_and_extract_buildroot()
-    else:
-        download_and_extract_buildroot()
+    if (patches := list(ROOT_FOLDER.glob('*.patch'))):
+        for patch in patches:
+            patch_cmd = [
+                'patch', '--directory', SRC_FOLDER, '--input', patch,
+                '--strip', '1'
+            ]
+            try:
+                subprocess.run(patch_cmd, check=True)
+            except subprocess.CalledProcessError as err:
+                raise RuntimeError(
+                    f"{patch} did not apply to Buildroot {BUILDROOT_VERSION}, does it need to be updated?"
+                ) from err
 
 
 def release_images():
@@ -161,7 +154,7 @@ if __name__ == '__main__':
 
     architectures = SUPPORTED_ARCHES if 'all' in args.architectures else args.architectures
 
-    download_buildroot_if_necessary()
+    download_and_extract_buildroot()
     for arch in architectures:
         build_image(arch, args.edit_config)
 
