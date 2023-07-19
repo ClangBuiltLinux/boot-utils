@@ -236,13 +236,42 @@ class QEMURunner:
             '-numa', 'node,memdev=shm',
         ]  # yapf: disable
 
+        # recent versions of the rust implementation of virtiofsd have
+        # deprecated the '-o' syntax for options. Check for the '-o' syntax in
+        # the help text of virtiofsd and use that if present or the new syntax
+        # if not.
+        base_virtiofsd_cmd = [sudo, virtiofsd]
+        virtiofsd_version_text = subprocess.run(
+            [*base_virtiofsd_cmd, '--version'],
+            capture_output=True,
+            check=True,
+            text=True).stdout
+        # C / QEMU / Reference implementation (deprecated)
+        if 'virtiofsd version' in virtiofsd_version_text:
+            virtiofsd_args = [
+                f"--socket-group={grp.getgrgid(os.getgid()).gr_name}",
+                f"--socket-path={self._vfsd_conf['files']['sock']}",
+                '-o', 'cache=always',
+                '-o', f"source={SHARED_FOLDER}",
+            ]  # yapf: disable
+        # Rust implementation
+        # The some of the above options are parsed as legacy compatibility
+        # options and as of at least 1.7.1, they are documented as deprecated.
+        # To guard against a release where those options are no longer parsed
+        # properly or at all, use the new option format. Once the Rust
+        # implementation is more widely available in distributions, support for
+        # the deprecated C implementation can be dropped.
+        else:
+            virtiofsd_args = [
+                '--cache', 'always',
+                '--shared-dir', SHARED_FOLDER,
+                '--socket-group', grp.getgrgid(os.getgid()).gr_name,
+                '--socket-path', self._vfsd_conf['files']['sock'],
+            ]  # yapf: disable
+
         self._vfsd_conf['cmd'] = [
-            sudo,
-            virtiofsd,
-            f"--socket-group={grp.getgrgid(os.getgid()).gr_name}",
-            f"--socket-path={self._vfsd_conf['files']['sock']}",
-            '-o', f"source={SHARED_FOLDER}",
-            '-o', 'cache=always',
+            *base_virtiofsd_cmd,
+            *virtiofsd_args
         ]  # yapf: disable
 
     def _prepare_initrd(self):
