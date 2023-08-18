@@ -212,8 +212,17 @@ class QEMURunner:
                 utils.die('Port 1234 is already in use, is QEMU running?')
 
             utils.green('Starting QEMU with gdb connection on port 1234...')
-            with subprocess.Popen(qemu_cmd,
-                                  preexec_fn=os.setpgrp) as qemu_proc:
+            # setpgrp() is equivalent to setpgid(0, 0). The 'process_group'
+            # keyword argument is equivalent to calling setpgid(0, arg) but it
+            # is only available in Python 3.11 and newer.
+            if sys.version_info >= (3, 11, 0):
+                popen_kwargs = {'process_group': 0}
+            else:
+                popen_kwargs = {'preexec_fn': os.setpgrp}
+            # pylint seems to think process_group will be used with Python 3.10
+            # and earlier?
+            # pylint: disable-next=unexpected-keyword-arg
+            with subprocess.Popen(qemu_cmd, **popen_kwargs) as qemu_proc:
                 utils.green(f"Starting {self.gdb_bin}...")
                 with subprocess.Popen(gdb_cmd) as gdb_proc, \
                      contextlib.suppress(KeyboardInterrupt):
