@@ -184,40 +184,42 @@ def prepare_initrd(architecture, rootfs_format='cpio', gh_json_file=None):
                f"rootfs.{rootfs_format}.zst")
     src.parent.mkdir(exist_ok=True, parents=True)
 
-    # First, make sure that the current user is not rate limited by GitHub,
-    # otherwise the next API call will not return valid information.
-    gh_json_rl = get_gh_json('https://api.github.com/rate_limit')
-    remaining = gh_json_rl['resources']['core']['remaining']
+    # If the user supplied a GitHub release JSON file, we do not need to bother
+    # querying the GitHub API at all.
+    if gh_json_file:
+        if not gh_json_file.exists():
+            raise FileNotFoundError(
+                f"Provided GitHub JSON file ('{gh_json_file}') does not exist!"
+            )
+        gh_json_rel = json.loads(gh_json_file.read_text(encoding='utf-8'))
+    else:
+        # Make sure that the current user is not rate limited by GitHub,
+        # otherwise the next API call will not return valid information.
+        gh_json_rl = get_gh_json('https://api.github.com/rate_limit')
 
-    # If we have API calls remaining or have already queried the API previously
-    # and cached the result, we can query for the latest release to make sure
-    # that we are up to date.
-    if remaining > 0 or gh_json_file:
-        if gh_json_file:
-            if not gh_json_file.exists():
-                raise FileNotFoundError(
-                    f"Provided GitHub JSON file ('{gh_json_file}') does not exist!"
-                )
-            gh_json_rel = json.loads(gh_json_file.read_text(encoding='utf-8'))
-        else:
+        # If we have API calls remaining or have already queried the API previously
+        # and cached the result, we can query for the latest release to make sure
+        # that we are up to date.
+        if (remaining := gh_json_rl['resources']['core']['remaining']) > 0:
             gh_json_rel = get_gh_json(
                 f"https://api.github.com/repos/{REPO}/releases/latest")
-        # Download the ramdisk if it is not already downloaded
-        if not src.exists():
+        elif not src.exists():
+            limit = gh_json_rl['resources']['core']['limit']
+            raise RuntimeError(
+                f"Cannot query GitHub API for latest images release due to rate limit (remaining: {remaining}, limit: {limit}) and {src} does not exist already! "
+                'Download it manually or supply a GitHub personal access token via the GITHUB_TOKEN environment variable to make an authenticated GitHub API request.'
+            )
+
+    # Download the ramdisk if it is not already downloaded
+    if not src.exists():
+        download_initrd(gh_json_rel, src)
+    # If it is already downloaded, check that it is up to date and download
+    # an update only if necessary.
+    elif (rel_file := src.with_name('.release')).exists():
+        cur_rel = rel_file.read_text(encoding='utf-8')
+        supplied_rel = gh_json_rel['tag_name']
+        if cur_rel != supplied_rel:
             download_initrd(gh_json_rel, src)
-        # If it is already downloaded, check that it is up to date and download
-        # an update only if necessary.
-        elif (rel_file := src.with_name('.release')).exists():
-            cur_rel = rel_file.read_text(encoding='utf-8')
-            latest_rel = gh_json_rel['tag_name']
-            if cur_rel != latest_rel:
-                download_initrd(gh_json_rel, src)
-    elif not src.exists():
-        limit = gh_json_rl['resources']['core']['limit']
-        raise RuntimeError(
-            f"Cannot query GitHub API for latest images release due to rate limit (remaining: {remaining}, limit: {limit}) and {src} does not exist already! "
-            'Download it manually or supply a GitHub personal access token via the GITHUB_TOKEN environment variable to make an authenticated GitHub API request.'
-        )
 
     check_cmd('zstd')
     (dst := src.with_suffix('')).unlink(missing_ok=True)
