@@ -49,6 +49,7 @@ class QEMURunner:
         self.interactive = False
         self.kernel = None
         self.kernel_dir = None
+        self.memory = '512m'
         self.supports_efi = False
         # It may be tempting to use self.use_kvm during initialization of
         # subclasses to set certain properties but the user can explicitly opt
@@ -70,7 +71,6 @@ class QEMURunner:
             '-nodefaults',
         ]  # yapf: disable
         self._qemu_path = None
-        self._ram = '512m'
 
     def _find_dtb(self):
         if not self._dtbs:
@@ -301,7 +301,7 @@ class QEMURunner:
             self._qemu_args += ['-cpu', ','.join(self._kvm_cpu), '-enable-kvm']
 
         # Machine specs
-        self._qemu_args += ['-m', self._ram]
+        self._qemu_args += ['-m', self.memory]
         if self.smp:
             self._qemu_args += ['-smp', str(self.smp)]
 
@@ -512,7 +512,7 @@ class LoongArchQEMURunner(QEMURunner):
             '-bios', bios,
             '-no-reboot',
         ]  # yapf: disable
-        self._ram = '2G'
+        self.memory = '2G'
         self.smp = 2
 
 
@@ -555,12 +555,12 @@ class PowerPC32QEMURunner(QEMURunner):
         super().__init__()
 
         self.cmdline.append('console=ttyS0')
+        self.memory = '128m'
         self._default_kernel_path = Path('arch/powerpc/boot/uImage')
         self._initrd_arch = 'ppc32'
         self._machine = 'bamboo'
         self._qemu_arch = 'ppc'
         self._qemu_args.append('-no-reboot')
-        self._ram = '128m'
 
     def run(self):
         self._qemu_args += ['-machine', self._machine]
@@ -582,6 +582,7 @@ class PowerPC64QEMURunner(QEMURunner):
     def __init__(self):
         super().__init__()
 
+        self.memory = '1G'
         self._default_kernel_path = Path('vmlinux')
         self._initrd_arch = self._qemu_arch = 'ppc64'
         self._qemu_args += [
@@ -589,7 +590,6 @@ class PowerPC64QEMURunner(QEMURunner):
             '-machine', 'pseries',
             '-vga', 'none',
         ]  # yapf: disable
-        self._ram = '1G'
 
 
 class PowerPC64LEQEMURunner(QEMURunner):
@@ -597,6 +597,7 @@ class PowerPC64LEQEMURunner(QEMURunner):
     def __init__(self):
         super().__init__()
 
+        self.memory = '2G'
         self._default_kernel_path = Path('arch/powerpc/boot/zImage.epapr')
         self._initrd_arch = 'ppc64le'
         self._qemu_arch = 'ppc64'
@@ -605,7 +606,6 @@ class PowerPC64LEQEMURunner(QEMURunner):
             '-device', 'isa-ipmi-bt,bmc=bmc0,irq=10',
             '-machine', 'powernv',
         ]  # yapf: disable
-        self._ram = '2G'
 
 
 class RISCVQEMURunner(QEMURunner):
@@ -812,6 +812,12 @@ def parse_arguments():
         action='store_true',
         help='Instead of immediately shutting down machine, spawn a shell.')
     parser.add_argument(
+        '-m',
+        '--memory',
+        help=
+        "Value for '-m' QEMU option (default: generally '512m', depends on machine)",
+    )
+    parser.add_argument(
         '-s',
         '--smp',
         type=int,
@@ -883,6 +889,9 @@ if __name__ == '__main__':
 
     if args.gh_json_file:
         runner.gh_json_file = Path(args.gh_json_file).resolve()
+
+    if args.memory:
+        runner.memory = args.memory
 
     if args.no_kvm:
         runner.use_kvm = False
