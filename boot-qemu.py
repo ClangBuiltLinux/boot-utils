@@ -283,7 +283,7 @@ class QEMURunner:
             ]  # yapf: disable
 
         # Kernel options
-        if self.interactive or args.gdb:
+        if self.interactive or self.gdb:
             self.cmdline.append('rdinit=/bin/sh')
         if self.gdb:
             self.cmdline.append('nokaslr')
