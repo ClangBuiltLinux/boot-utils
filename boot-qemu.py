@@ -319,6 +319,31 @@ class QEMURunner:
             self._run_fg()
 
 
+class ARMEFIQEMURunner(QEMURunner):
+
+    def _setup_efi(self, possible_locations):
+        # Sizing the images to 64M is recommended by "Prepare the firmware" section at
+        # https://mirrors.edge.kernel.org/pub/linux/kernel/people/will/docs/qemu/qemu-arm64-howto.html
+        efi_img_size = 64 * 1024 * 1024  # 64M
+
+        usr_share = Path('/usr/share')
+
+        aavmf = utils.find_first_file(usr_share, possible_locations)
+
+        self._efi_img = Path(utils.BOOT_UTILS, 'images', self._initrd_arch,
+                             'efi.img')
+        # This file is in /usr/share, so it must be copied in order to be
+        # modified.
+        shutil.copyfile(aavmf, self._efi_img)
+        with self._efi_img.open(mode='r+b') as file:
+            file.truncate(efi_img_size)
+
+        self._efi_vars = self._efi_img.with_name('efivars.img')
+        self._efi_vars.unlink(missing_ok=True)
+        with self._efi_vars.open(mode='xb') as file:
+            file.truncate(efi_img_size)
+
+
 class ARMQEMURunner(QEMURunner):
 
     def __init__(self):
@@ -359,11 +384,12 @@ class ARMV6QEMURunner(ARMQEMURunner):
         self._machine = 'romulus-bmc'
 
 
-class ARMV7QEMURunner(ARMQEMURunner):
+class ARMV7QEMURunner(ARMQEMURunner, ARMEFIQEMURunner):
 
     def __init__(self):
         super().__init__()
 
+        self.supports_efi = True
         self.use_kvm = self._can_use_kvm()
 
         self.cmdline += ['console=ttyAMA0', 'earlycon']
@@ -386,6 +412,12 @@ class ARMV7QEMURunner(ARMQEMURunner):
         return self._have_dev_kvm_access()
 
     def run(self):
+        if self.efi:
+            aavmf_locations = [
+                Path('edk2/arm/QEMU_EFI.fd'),  # Arch Linux, Fedora
+            ]
+            self._setup_efi(aavmf_locations)
+
         if self.use_kvm:
             self._kvm_cpu.append('aarch64=off')
             self._qemu_arch = 'aarch64'
@@ -393,7 +425,7 @@ class ARMV7QEMURunner(ARMQEMURunner):
         super().run()
 
 
-class ARM64QEMURunner(QEMURunner):
+class ARM64QEMURunner(ARMEFIQEMURunner):
 
     def __init__(self):
         super().__init__()
@@ -429,34 +461,6 @@ class ARM64QEMURunner(QEMURunner):
 
         return cpu
 
-    def _setup_efi(self):
-        # Sizing the images to 64M is recommended by "Prepare the firmware" section at
-        # https://mirrors.edge.kernel.org/pub/linux/kernel/people/will/docs/qemu/qemu-arm64-howto.html
-        efi_img_size = 64 * 1024 * 1024  # 64M
-
-        usr_share = Path('/usr/share')
-
-        aavmf_locations = [
-            Path('edk2/aarch64/QEMU_EFI.silent.fd'),  # Fedora
-            Path('edk2/aarch64/QEMU_EFI.fd'),  # Arch Linux (current)
-            Path('edk2-armvirt/aarch64/QEMU_EFI.fd'),  # Arch Linux (old)
-            Path('qemu-efi-aarch64/QEMU_EFI.fd'),  # Debian and Ubuntu
-        ]
-        aavmf = utils.find_first_file(usr_share, aavmf_locations)
-
-        self._efi_img = Path(utils.BOOT_UTILS, 'images', self._initrd_arch,
-                             'efi.img')
-        # This file is in /usr/share, so it must be copied in order to be
-        # modified.
-        shutil.copyfile(aavmf, self._efi_img)
-        with self._efi_img.open(mode='r+b') as file:
-            file.truncate(efi_img_size)
-
-        self._efi_vars = self._efi_img.with_name('efivars.img')
-        self._efi_vars.unlink(missing_ok=True)
-        with self._efi_vars.open(mode='xb') as file:
-            file.truncate(efi_img_size)
-
     def run(self):
         machine = ['virt', 'gic-version=max']
 
@@ -471,7 +475,13 @@ class ARM64QEMURunner(QEMURunner):
         self._qemu_args += ['-machine', ','.join(machine)]
 
         if self.efi:
-            self._setup_efi()
+            aavmf_locations = [
+                Path('edk2/aarch64/QEMU_EFI.silent.fd'),  # Fedora
+                Path('edk2/aarch64/QEMU_EFI.fd'),  # Arch Linux (current)
+                Path('edk2-armvirt/aarch64/QEMU_EFI.fd'),  # Arch Linux (old)
+                Path('qemu-efi-aarch64/QEMU_EFI.fd'),  # Debian and Ubuntu
+            ]
+            self._setup_efi(aavmf_locations)
 
         super().run()
 
