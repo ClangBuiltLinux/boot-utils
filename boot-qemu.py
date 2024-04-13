@@ -661,6 +661,7 @@ class X86QEMURunner(QEMURunner):
         self._default_kernel_path = Path('arch/x86/boot/bzImage')
         self._initrd_arch = 'x86'
         self._qemu_arch = 'i386'
+        self._qemu_args += ['-M', 'q35']
 
     def run(self):
         if self.use_kvm and not self.efi:
@@ -699,8 +700,8 @@ class X8664QEMURunner(X86QEMURunner):
                 Path('OVMF/OVMF_VARS.fd'),  # Debian and Ubuntu
             ]
             ovmf_vars = utils.find_first_file(usr_share, ovmf_vars_locations)
-            self._efi_vars = Path(utils.BOOT_UTILS, 'images', self.initrd_arch,
-                                  ovmf_vars.name)
+            self._efi_vars = Path(utils.BOOT_UTILS, 'images',
+                                  self._initrd_arch, ovmf_vars.name)
             # This file is in /usr/share, so it must be copied in order to be
             # modified.
             shutil.copyfile(ovmf_vars, self._efi_vars)
