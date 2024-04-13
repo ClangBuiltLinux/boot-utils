@@ -661,6 +661,7 @@ class X86QEMURunner(QEMURunner):
         self._default_kernel_path = Path('arch/x86/boot/bzImage')
         self._initrd_arch = 'x86'
         self._qemu_arch = 'i386'
+        self._qemu_args += ['-M', 'q35']
 
     def run(self):
         if self.use_kvm and not self.efi:
