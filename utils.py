@@ -212,6 +212,9 @@ def prepare_initrd(architecture, rootfs_format='cpio', gh_json_file=None):
 
     # Download the ramdisk if it is not already downloaded
     if not src.exists():
+        # gh_json_rel cannot be unset when used here because the elif condition
+        # above is the same as this one, which causes the script to exit.
+        # pylint: disable-next=possibly-used-before-assignment
         download_initrd(gh_json_rel, src)
     # If it is already downloaded, check that it is up to date and download
     # an update only if necessary.
