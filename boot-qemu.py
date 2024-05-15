@@ -125,6 +125,9 @@ class QEMURunner:
         utils.check_cmd(decomp_prog)
         if decomp_prog in ('gzip', ):
             decomp_cmd = [decomp_prog, '-c', '-d', self.kernel]
+        else:
+            raise RuntimeError(
+                f"Unsupported decompression program ('{decomp_prog}')?")
         decomp = subprocess.run(decomp_cmd, capture_output=True, check=True)
 
         utils.check_cmd('strings')
