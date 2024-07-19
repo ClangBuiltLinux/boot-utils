@@ -511,6 +511,10 @@ class LoongArchQEMURunner(QEMURunner):
         bios = Path(utils.BOOT_UTILS, 'images', self._initrd_arch,
                     'edk2-loongarch64-code.fd')
         if not bios.exists():
+            # Loongson renamed this in https://github.com/loongson/Firmware/commit/638906de6143283d86c70d80f4e9a30b50731c24
+            # so download it to the new location if it does not exist already.
+            bios = bios.with_name('QEMU_EFI.fd')
+
             bios.parent.mkdir(exist_ok=True, parents=True)
             firmware_url = f"https://github.com/loongson/Firmware/raw/main/LoongArchVirtMachine/{bios.name}"
             utils.green(
