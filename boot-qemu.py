@@ -31,6 +31,7 @@ SUPPORTED_ARCHES = [
     'ppc64le',
     'riscv',
     's390',
+    'sparc64',
     'x86',
     'x86_64',
 ]
@@ -656,6 +657,17 @@ class S390QEMURunner(QEMURunner):
         self._qemu_args += ['-M', 's390-ccw-virtio']
 
 
+class Sparc64QEMURunner(QEMURunner):
+
+    def __init__(self):
+        super().__init__()
+
+        self.cmdline.append('console=ttyS0')
+        self._default_kernel_path = Path('arch/sparc/boot/image')
+        self._initrd_arch = self._qemu_arch = 'sparc64'
+        self._qemu_args += ['-M', 'sun4u', '-cpu', 'TI UltraSparc IIi']
+
+
 class X86QEMURunner(QEMURunner):
 
     def __init__(self):
@@ -768,6 +780,7 @@ def guess_arch(kernel_arg):
         'ELF 64-bit LSB executable, 64-bit PowerPC or cisco 7500, OpenPOWER ELF V2 ABI': 'ppc64le',
         'ELF 64-bit LSB executable, UCB RISC-V': 'riscv',
         'ELF 64-bit MSB executable, IBM S/390': 's390',
+        'ELF 64-bit MSB executable, SPARC V9': 'sparc64',
         'ELF 32-bit LSB executable, Intel 80386': 'x86',
         'ELF 64-bit LSB executable, x86-64': 'x86_64',
     }  # yapf: disable
@@ -877,6 +890,7 @@ if __name__ == '__main__':
         'ppc64le': PowerPC64LEQEMURunner,
         'riscv': RISCVQEMURunner,
         's390': S390QEMURunner,
+        'sparc64': Sparc64QEMURunner,
         'x86': X86QEMURunner,
         'x86_64': X8664QEMURunner,
     }
