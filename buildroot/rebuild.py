@@ -21,6 +21,7 @@ SUPPORTED_ARCHES = [
     'ppc64le',
     'riscv',
     's390',
+    'sparc64',
     'x86',
     'x86_64',
 ]
