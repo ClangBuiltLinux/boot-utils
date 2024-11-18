@@ -7,7 +7,7 @@ from pathlib import Path
 import shutil
 import subprocess
 
-BUILDROOT_VERSION = '2023.02.2'
+BUILDROOT_VERSION = '2024.02.8'
 SUPPORTED_ARCHES = [
     'arm64',
     'arm64be',
