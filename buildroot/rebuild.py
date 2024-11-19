@@ -7,7 +7,7 @@ from pathlib import Path
 import shutil
 import subprocess
 
-BUILDROOT_VERSION = '2023.02.2'
+BUILDROOT_VERSION = '2024.02.8'
 SUPPORTED_ARCHES = [
     'arm64',
     'arm64be',
@@ -21,6 +21,7 @@ SUPPORTED_ARCHES = [
     'ppc64le',
     'riscv',
     's390',
+    'sparc64',
     'x86',
     'x86_64',
 ]
@@ -38,7 +39,7 @@ def buildroot_make(make_arg=None, **kwargs):
     subprocess.run(make_cmd, **kwargs, check=True, cwd=SRC_FOLDER)
 
 
-def build_image(architecture, edit_config):
+def build_image(architecture, edit_config, savedefconfig):
     buildroot_make('clean')
 
     config = Path(ROOT_FOLDER, f"{architecture}.config")
@@ -50,6 +51,7 @@ def build_image(architecture, edit_config):
     buildroot_make('defconfig', env={**os.environ, 'BR2_DEFCONFIG': config})
     if edit_config:
         buildroot_make('menuconfig')
+    if edit_config or savedefconfig:
         buildroot_make('savedefconfig')
 
     buildroot_make()
@@ -141,6 +143,10 @@ def parse_arguments():
         '--release',
         action='store_true',
         help=f"Create a release on GitHub (tag: {RELEASE_TAG})")
+    parser.add_argument('-s',
+                        '--savedefconfig',
+                        action='store_true',
+                        help='Run savedefconfig after configuration stage')
 
     return parser.parse_args()
 
@@ -156,7 +162,7 @@ if __name__ == '__main__':
 
     download_and_extract_buildroot()
     for arch in architectures:
-        build_image(arch, args.edit_config)
+        build_image(arch, args.edit_config, args.savedefconfig)
 
     if args.release:
         release_images()
