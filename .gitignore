@@ -1,3 +1,5 @@
 images/
 qemu-binaries/
 *.pyc
+shared/
+.vfsd.*
