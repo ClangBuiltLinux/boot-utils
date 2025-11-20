@@ -185,7 +185,8 @@ class QEMURunner:
 
         qemu_cmd += [self._qemu_path, *self._qemu_args]
 
-        print(f"$ {' '.join(shlex.quote(str(elem)) for elem in qemu_cmd)}")
+        print(f"$ {' '.join(shlex.quote(str(elem)) for elem in qemu_cmd)}",
+              flush=True)
         try:
             subprocess.run(qemu_cmd, check=True)
         except subprocess.CalledProcessError as err:
