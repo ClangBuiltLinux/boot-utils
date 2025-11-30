@@ -50,7 +50,7 @@ class QEMURunner:
         self.interactive = False
         self.kernel = None
         self.kernel_dir = None
-        self.memory = '512m'
+        self.memory = '1G'
         self.supports_efi = False
         # It may be tempting to use self.use_kvm during initialization of
         # subclasses to set certain properties but the user can explicitly opt
@@ -371,6 +371,7 @@ class ARMV5QEMURunner(ARMQEMURunner):
         super().__init__()
 
         self.cmdline.append('earlycon')
+        self.memory = '512m'
 
         self._dtbs = [
             'aspeed/aspeed-bmc-opp-palmetto.dtb', 'aspeed-bmc-opp-palmetto.dtb'
@@ -597,7 +598,6 @@ class PowerPC64QEMURunner(QEMURunner):
     def __init__(self):
         super().__init__()
 
-        self.memory = '1G'
         self._default_kernel_path = Path('vmlinux')
         self._initrd_arch = self._qemu_arch = 'ppc64'
         self._qemu_args += [
