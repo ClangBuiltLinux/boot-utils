@@ -47,6 +47,7 @@ class QEMURunner:
         self.gdb = False
         self.gdb_bin = ''
         self.gh_json_file = None
+        self.initrd = None
         self.interactive = False
         self.kernel = None
         self.kernel_dir = None
@@ -167,6 +168,8 @@ class QEMURunner:
         return os.access('/dev/kvm', os.R_OK | os.W_OK)
 
     def _prepare_initrd(self):
+        if self.initrd:
+            return self.initrd
         if not self._initrd_arch:
             raise RuntimeError('No initrd architecture specified?')
         return utils.prepare_initrd(self._initrd_arch,
@@ -822,6 +825,12 @@ def parse_arguments():
         'Use file for downloading rootfs images, instead of querying GitHub API directly'
     )
     parser.add_argument(
+        '-I',
+        '--initrd',
+        help=
+        'Initial ramdisk to use (default: Download ramdisk from ClangBuiltLinux/boot-utils releases)'
+    )
+    parser.add_argument(
         '-k',
         '--kernel-location',
         required=True,
@@ -918,6 +927,12 @@ if __name__ == '__main__':
 
     if args.gh_json_file:
         runner.gh_json_file = Path(args.gh_json_file).resolve()
+
+    if args.initrd:
+        if not (initrd := Path(args.initrd).resolve()).exists():
+            raise FileNotFoundError(
+                f"Supplied initrd ('{initrd}') does not exist?")
+        runner.initrd = initrd
 
     if args.memory:
         runner.memory = args.memory
