@@ -172,7 +172,10 @@ def green(string):
     print(f"\n\033[01;32m{string}\033[0m", flush=True)
 
 
-def prepare_initrd(architecture, rootfs_format='cpio', gh_json_file=None):
+def prepare_initrd(architecture,
+                   rootfs_format='cpio',
+                   gh_json_file=None,
+                   modules=None):
     """
     Returns a decompressed initial ramdisk.
 
@@ -227,6 +230,24 @@ def prepare_initrd(architecture, rootfs_format='cpio', gh_json_file=None):
     check_cmd('zstd')
     (dst := src.with_suffix('')).unlink(missing_ok=True)
     subprocess.run(['zstd', '-d', src, '-o', dst, '-q'], check=True)
+
+    if modules:
+        # "new" cpio magic bytes
+        cpio_sig = bytes([0x30, 0x37, 0x30, 0x37, 0x30, 0x31])
+        with modules.open('rb') as module_file:
+            if module_file.read(6) != cpio_sig:
+                raise RuntimeError(
+                    f"{modules} does not have cpio magic bytes, was it generated with the 'modules-cpio-pkg' target?"
+                )
+
+        (new_dst :=
+         dst.parent.joinpath('rootfs-modules.cpio')).unlink(missing_ok=True)
+        with subprocess.Popen(['cat', dst, modules],
+                              stdout=subprocess.PIPE,
+                              stderr=subprocess.STDOUT) as proc, new_dst.open(
+                                  'xb') as dst_file:
+            dst_file.write(proc.stdout.read())
+        dst = new_dst
 
     return dst
 

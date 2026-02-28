@@ -52,6 +52,7 @@ class QEMURunner:
         self.kernel = None
         self.kernel_dir = None
         self.memory = '1G'
+        self.modules = None
         self.supports_efi = False
         # It may be tempting to use self.use_kvm during initialization of
         # subclasses to set certain properties but the user can explicitly opt
@@ -173,7 +174,8 @@ class QEMURunner:
         if not self._initrd_arch:
             raise RuntimeError('No initrd architecture specified?')
         return utils.prepare_initrd(self._initrd_arch,
-                                    gh_json_file=self.gh_json_file)
+                                    gh_json_file=self.gh_json_file,
+                                    modules=self.modules)
 
     def _run_fg(self):
         # Pretty print and run QEMU command
@@ -855,6 +857,12 @@ def parse_arguments():
         "Value for '-m' QEMU option (default: generally '512m', depends on machine)",
     )
     parser.add_argument(
+        '-M',
+        '--modules',
+        help=
+        'Path to .cpio generated with the Linux kernel\'s "modules-cpio-pkg" target'
+    )
+    parser.add_argument(
         '-s',
         '--smp',
         type=int,
@@ -936,6 +944,16 @@ if __name__ == '__main__':
 
     if args.memory:
         runner.memory = args.memory
+
+    if args.modules:
+        if not (modules := Path(args.modules).resolve()).exists():
+            raise FileNotFoundError(
+                f"Supplied modules .cpio ('{modules}') does not exist?")
+        if not args.memory:
+            utils.yellow(
+                'Memory not specified, the default may be too small for modules...'
+            )
+        runner.modules = modules
 
     if args.no_kvm:
         runner.use_kvm = False
