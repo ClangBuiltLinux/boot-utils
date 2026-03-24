@@ -25,8 +25,7 @@ SUPPORTED_ARCHES = [
     'x86',
     'x86_64',
 ]
-RELEASE_TAG = datetime.datetime.now(
-    tz=datetime.timezone.utc).strftime('%Y%m%d-%H%M%S')
+RELEASE_TAG = datetime.datetime.now(tz=datetime.timezone.utc).strftime('%Y%m%d-%H%M%S')
 ROOT_FOLDER = Path(__file__).resolve().parent
 OUT_FOLDER = Path(ROOT_FOLDER, 'out')
 SRC_FOLDER = Path(ROOT_FOLDER, 'src')
@@ -65,11 +64,14 @@ def build_image(architecture, edit_config, savedefconfig):
 
     for image in images:
         if not image.exists():
-            raise FileNotFoundError(
-                f"{image} could not be found! Did the build error?")
+            raise FileNotFoundError(f"{image} could not be found! Did the build error?")
         zstd_cmd = [
-            'zstd', '-f', '-19', '-o',
-            Path(OUT_FOLDER, f"{architecture}-{image.name}.zst"), image
+            'zstd',
+            '-f',
+            '-19',
+            '-o',
+            Path(OUT_FOLDER, f"{architecture}-{image.name}.zst"),
+            image,
         ]
         subprocess.run(zstd_cmd, check=True)
 
@@ -82,24 +84,30 @@ def download_and_extract_buildroot():
     tarball = Path(ROOT_FOLDER, f"buildroot-{BUILDROOT_VERSION}.tar.gz")
     if not tarball.exists():
         curl_cmd = [
-            'curl', '-LSs', '-o', tarball,
-            f"https://buildroot.org/downloads/{tarball.name}"
+            'curl',
+            '-LSs',
+            '-o',
+            tarball,
+            f"https://buildroot.org/downloads/{tarball.name}",
         ]
         subprocess.run(curl_cmd, check=True)
 
     sha256_cmd = ['sha256sum', '--quiet', '-c', f"{tarball.name}.sha256"]
     subprocess.run(sha256_cmd, check=True, cwd=ROOT_FOLDER)
 
-    tar_cmd = [
-        'tar', '-C', SRC_FOLDER, '--strip-components=1', '-axf', tarball
-    ]
+    tar_cmd = ['tar', '-C', SRC_FOLDER, '--strip-components=1', '-axf', tarball]
     subprocess.run(tar_cmd, check=True)
 
-    if (patches := list(ROOT_FOLDER.glob('*.patch'))):
+    if patches := list(ROOT_FOLDER.glob('*.patch')):
         for patch in patches:
             patch_cmd = [
-                'patch', '--directory', SRC_FOLDER, '--input', patch,
-                '--strip', '1'
+                'patch',
+                '--directory',
+                SRC_FOLDER,
+                '--input',
+                patch,
+                '--strip',
+                '1',
             ]
             try:
                 subprocess.run(patch_cmd, check=True)
@@ -116,8 +124,14 @@ def release_images():
         )
 
     gh_cmd = [
-        'gh', '-R', 'ClangBuiltLinux/boot-utils', 'release', 'create',
-        '--generate-notes', RELEASE_TAG, *list(OUT_FOLDER.iterdir())
+        'gh',
+        '-R',
+        'ClangBuiltLinux/boot-utils',
+        'release',
+        'create',
+        '--generate-notes',
+        RELEASE_TAG,
+        *list(OUT_FOLDER.iterdir()),
     ]
     subprocess.run(gh_cmd, check=True)
 
@@ -130,23 +144,27 @@ def parse_arguments():
         '--architectures',
         choices=[*SUPPORTED_ARCHES, 'all'],
         default=SUPPORTED_ARCHES,
-        help=
-        'The architectures to build images for. Defaults to all supported architectures.',
-        nargs='+')
+        help='The architectures to build images for. Defaults to all supported architectures.',
+        nargs='+',
+    )
     parser.add_argument(
         '-e',
         '--edit-config',
         action='store_true',
-        help='Edit configuration file and run savedefconfig on result')
+        help='Edit configuration file and run savedefconfig on result',
+    )
     parser.add_argument(
         '-r',
         '--release',
         action='store_true',
-        help=f"Create a release on GitHub (tag: {RELEASE_TAG})")
-    parser.add_argument('-s',
-                        '--savedefconfig',
-                        action='store_true',
-                        help='Run savedefconfig after configuration stage')
+        help=f"Create a release on GitHub (tag: {RELEASE_TAG})",
+    )
+    parser.add_argument(
+        '-s',
+        '--savedefconfig',
+        action='store_true',
+        help='Run savedefconfig after configuration stage',
+    )
 
     return parser.parse_args()
 
@@ -155,10 +173,11 @@ if __name__ == '__main__':
     args = parse_arguments()
 
     if not shutil.which('zstd'):
-        raise RuntimeError(
-            'zstd could not be found on your system, please install it!')
+        raise RuntimeError('zstd could not be found on your system, please install it!')
 
-    architectures = SUPPORTED_ARCHES if 'all' in args.architectures else args.architectures
+    architectures = (
+        SUPPORTED_ARCHES if 'all' in args.architectures else args.architectures
+    )
 
     download_and_extract_buildroot()
     for arch in architectures:
