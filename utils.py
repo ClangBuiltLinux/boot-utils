@@ -20,8 +20,9 @@ def check_cmd(cmd):
         cmd (str): External command name or path.
     """
     if not shutil.which(cmd):
-        die(f"The external command '{cmd}' is needed but it could not be found in PATH, please install it!"
-            )
+        die(
+            f"The external command '{cmd}' is needed but it could not be found in PATH, please install it!"
+        )
 
 
 def die(string):
@@ -53,9 +54,7 @@ def download_initrd(gh_json, local_dest):
 
     for asset in assets:
         if asset['name'] == remote_file:
-            curl_cmd = [
-                'curl', '-LSs', '-o', local_dest, asset['browser_download_url']
-            ]
+            curl_cmd = ['curl', '-LSs', '-o', local_dest, asset['browser_download_url']]
             subprocess.run(curl_cmd, check=True)
 
             # Update the '.release' file in the same folder as the download
@@ -119,8 +118,9 @@ def get_full_kernel_path(kernel_location, image, arch=None):
     # Otherwise, it is in the architecture's boot directory
     else:
         if not arch:
-            die(f"Kernel image ('{image}') is in the arch/ directory but 'arch' was not provided!"
-                )
+            die(
+                f"Kernel image ('{image}') is in the arch/ directory but 'arch' was not provided!"
+            )
         kernel = kernel_location.joinpath("arch", arch, "boot", image)
 
     if not kernel.exists():
@@ -151,13 +151,13 @@ def get_gh_json(endpoint):
     curl_cmd.append(endpoint)
 
     try:
-        curl_out = subprocess.run(curl_cmd,
-                                  capture_output=True,
-                                  check=True,
-                                  text=True).stdout
+        curl_out = subprocess.run(
+            curl_cmd, capture_output=True, check=True, text=True
+        ).stdout
     except subprocess.CalledProcessError as err:
         raise RuntimeError(
-            f"Failed to query GitHub API at {endpoint}: {err.stderr}") from err
+            f"Failed to query GitHub API at {endpoint}: {err.stderr}"
+        ) from err
 
     return json.loads(curl_out)
 
@@ -172,10 +172,7 @@ def green(string):
     print(f"\n\033[01;32m{string}\033[0m", flush=True)
 
 
-def prepare_initrd(architecture,
-                   rootfs_format='cpio',
-                   gh_json_file=None,
-                   modules=None):
+def prepare_initrd(architecture, rootfs_format='cpio', gh_json_file=None, modules=None):
     """
     Returns a decompressed initial ramdisk.
 
@@ -183,8 +180,7 @@ def prepare_initrd(architecture,
         architecture (str): Architecture to download image for.
         rootfs_format (str): Initrd format ('cpio' or 'ext4')
     """
-    src = Path(BOOT_UTILS, 'images', architecture,
-               f"rootfs.{rootfs_format}.zst")
+    src = Path(BOOT_UTILS, 'images', architecture, f"rootfs.{rootfs_format}.zst")
     src.parent.mkdir(exist_ok=True, parents=True)
 
     # If the user supplied a GitHub release JSON file, we do not need to bother
@@ -205,7 +201,8 @@ def prepare_initrd(architecture,
         # that we are up to date.
         if (remaining := gh_json_rl['resources']['core']['remaining']) > 0:
             gh_json_rel = get_gh_json(
-                f"https://api.github.com/repos/{REPO}/releases/latest")
+                f"https://api.github.com/repos/{REPO}/releases/latest"
+            )
         elif not src.exists():
             limit = gh_json_rl['resources']['core']['limit']
             raise RuntimeError(
@@ -240,12 +237,10 @@ def prepare_initrd(architecture,
                     f"{modules} does not have cpio magic bytes, was it generated with the 'modules-cpio-pkg' target?"
                 )
 
-        (new_dst :=
-         dst.parent.joinpath('rootfs-modules.cpio')).unlink(missing_ok=True)
-        with subprocess.Popen(['cat', dst, modules],
-                              stdout=subprocess.PIPE,
-                              stderr=subprocess.STDOUT) as proc, new_dst.open(
-                                  'xb') as dst_file:
+        (new_dst := dst.parent.joinpath('rootfs-modules.cpio')).unlink(missing_ok=True)
+        with subprocess.Popen(
+            ['cat', dst, modules], stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+        ) as proc, new_dst.open('xb') as dst_file:
             dst_file.write(proc.stdout.read())
         dst = new_dst
 

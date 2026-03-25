@@ -38,7 +38,6 @@ SUPPORTED_ARCHES = [
 
 
 class QEMURunner:
-
     def __init__(self):
 
         # Properties that can be adjusted by the user or class
@@ -72,7 +71,7 @@ class QEMURunner:
         self._qemu_args = [
             '-display', 'none',
             '-nodefaults',
-        ]  # yapf: disable
+        ]  # fmt: off
         self._qemu_path = None
 
     def _find_dtb(self):
@@ -106,14 +105,14 @@ class QEMURunner:
         #   * <kernel_dir>/../../../.config (if the image is in arch/*/boot/)
         #   * <kernel_dir>/config (if the image is in a TuxMake folder)
         possible_locations = ['.config', '../../../.config', 'config']
-        configuration = utils.find_first_file(self.kernel_dir,
-                                              possible_locations,
-                                              required=False)
+        configuration = utils.find_first_file(
+            self.kernel_dir, possible_locations, required=False
+        )
 
         config_nr_cpus = 8  # sensible default based on treewide defaults,
         if configuration:
             conf_txt = configuration.read_text(encoding='utf-8')
-            if (match := re.search(r'CONFIG_NR_CPUS=(\d+)', conf_txt)):
+            if match := re.search(r'CONFIG_NR_CPUS=(\d+)', conf_txt):
                 config_nr_cpus = int(match.groups()[0])
 
         # Use the minimum of the number of usable processers for the script or
@@ -126,42 +125,38 @@ class QEMURunner:
             raise RuntimeError('No kernel set?')
 
         utils.check_cmd(decomp_prog)
-        if decomp_prog in ('gzip', ):
+        if decomp_prog in ('gzip',):
             decomp_cmd = [decomp_prog, '-c', '-d', self.kernel]
         else:
-            raise RuntimeError(
-                f"Unsupported decompression program ('{decomp_prog}')?")
+            raise RuntimeError(f"Unsupported decompression program ('{decomp_prog}')?")
         decomp = subprocess.run(decomp_cmd, capture_output=True, check=True)
 
         utils.check_cmd('strings')
-        strings = subprocess.run('strings',
-                                 capture_output=True,
-                                 check=True,
-                                 input=decomp.stdout)
-        strings_stdout = strings.stdout.decode(encoding='utf-8',
-                                               errors='ignore')
+        strings = subprocess.run(
+            'strings', capture_output=True, check=True, input=decomp.stdout
+        )
+        strings_stdout = strings.stdout.decode(encoding='utf-8', errors='ignore')
 
-        if not (match := re.search(r'^Linux version (\d+\.\d+\.\d+)',
-                                   strings_stdout,
-                                   flags=re.M)):
-            raise RuntimeError(
-                f"Could not find Linux version in {self.kernel}?")
+        if not (
+            match := re.search(
+                r'^Linux version (\d+\.\d+\.\d+)', strings_stdout, flags=re.M
+            )
+        ):
+            raise RuntimeError(f"Could not find Linux version in {self.kernel}?")
 
         return tuple(int(x) for x in match.groups()[0].split('.'))
 
     def _get_qemu_ver_string(self):
         if not self._qemu_path:
             raise RuntimeError('No path to QEMU set?')
-        qemu_ver = subprocess.run([self._qemu_path, '--version'],
-                                  capture_output=True,
-                                  check=True,
-                                  text=True)
+        qemu_ver = subprocess.run(
+            [self._qemu_path, '--version'], capture_output=True, check=True, text=True
+        )
         return qemu_ver.stdout.splitlines()[0]
 
     def _get_qemu_ver_tuple(self):
         qemu_ver_string = self._get_qemu_ver_string()
-        if not (match := re.search(r'version (\d+\.\d+.\d+)',
-                                   qemu_ver_string)):
+        if not (match := re.search(r'version (\d+\.\d+.\d+)', qemu_ver_string)):
             raise RuntimeError('Could not find QEMU version?')
         return tuple(int(x) for x in match.groups()[0].split('.'))
 
@@ -173,9 +168,9 @@ class QEMURunner:
             return self.initrd
         if not self._initrd_arch:
             raise RuntimeError('No initrd architecture specified?')
-        return utils.prepare_initrd(self._initrd_arch,
-                                    gh_json_file=self.gh_json_file,
-                                    modules=self.modules)
+        return utils.prepare_initrd(
+            self._initrd_arch, gh_json_file=self.gh_json_file, modules=self.modules
+        )
 
     def _run_fg(self):
         # Pretty print and run QEMU command
@@ -190,8 +185,7 @@ class QEMURunner:
 
         qemu_cmd += [self._qemu_path, *self._qemu_args]
 
-        print(f"$ {' '.join(shlex.quote(str(elem)) for elem in qemu_cmd)}",
-              flush=True)
+        print(f"$ {' '.join(shlex.quote(str(elem)) for elem in qemu_cmd)}", flush=True)
         try:
             subprocess.run(qemu_cmd, check=True)
         except subprocess.CalledProcessError as err:
@@ -215,9 +209,7 @@ class QEMURunner:
         ]
 
         while True:
-            lsof = subprocess.run(['lsof', '-i:1234'],
-                                  capture_output=True,
-                                  check=False)
+            lsof = subprocess.run(['lsof', '-i:1234'], capture_output=True, check=False)
             if lsof.returncode == 0:
                 utils.die('Port 1234 is already in use, is QEMU running?')
 
@@ -234,8 +226,9 @@ class QEMURunner:
             # pylint: disable-next=unexpected-keyword-arg
             with subprocess.Popen(qemu_cmd, **popen_kwargs) as qemu_proc:
                 utils.green(f"Starting {self.gdb_bin}...")
-                with subprocess.Popen(gdb_cmd) as gdb_proc, \
-                     contextlib.suppress(KeyboardInterrupt):
+                with subprocess.Popen(gdb_cmd) as gdb_proc, contextlib.suppress(
+                    KeyboardInterrupt
+                ):
                     gdb_proc.wait()
 
                 utils.red('Killing QEMU...')
@@ -253,8 +246,7 @@ class QEMURunner:
             return
 
         if not self.kernel_dir:
-            raise RuntimeError(
-                'No kernel image or kernel build folder specified?')
+            raise RuntimeError('No kernel image or kernel build folder specified?')
         if not self._default_kernel_path:
             raise RuntimeError('No default kernel path specified?')
 
@@ -262,8 +254,7 @@ class QEMURunner:
             Path(self._default_kernel_path),  # default (kbuild)
             Path(self._default_kernel_path.name),  # tuxmake
         }
-        self.kernel = utils.find_first_file(self.kernel_dir,
-                                            possible_kernel_locations)
+        self.kernel = utils.find_first_file(self.kernel_dir, possible_kernel_locations)
 
     def _set_qemu_path(self):
         if self._qemu_path:
@@ -272,8 +263,7 @@ class QEMURunner:
             raise RuntimeError('No QEMU architecture set?')
         qemu_bin = f"qemu-system-{self._qemu_arch}"
         if not (qemu_path := shutil.which(qemu_bin)):
-            raise RuntimeError(
-                f'{qemu_bin} could not be found on your system?')
+            raise RuntimeError(f'{qemu_bin} could not be found on your system?')
         self._qemu_path = Path(qemu_path)
 
     def run(self):
@@ -290,7 +280,7 @@ class QEMURunner:
                 '-drive', f"if=pflash,format=raw,file={self._efi_vars}",
                 '-object', 'rng-random,filename=/dev/urandom,id=rng0',
                 '-device', 'virtio-rng-pci',
-            ]  # yapf: disable
+            ]  # fmt: off
 
         # Kernel options
         if self.interactive or self.gdb:
@@ -330,7 +320,6 @@ class QEMURunner:
 
 
 class ARMEFIQEMURunner(QEMURunner):
-
     def _setup_efi(self, possible_locations):
         # Sizing the images to 64M is recommended by "Prepare the firmware" section at
         # https://mirrors.edge.kernel.org/pub/linux/kernel/people/will/docs/qemu/qemu-arm64-howto.html
@@ -340,8 +329,7 @@ class ARMEFIQEMURunner(QEMURunner):
 
         aavmf = utils.find_first_file(usr_share, possible_locations)
 
-        self._efi_img = Path(utils.BOOT_UTILS, 'images', self._initrd_arch,
-                             'efi.img')
+        self._efi_img = Path(utils.BOOT_UTILS, 'images', self._initrd_arch, 'efi.img')
         # This file is in /usr/share, so it must be copied in order to be
         # modified.
         shutil.copyfile(aavmf, self._efi_img)
@@ -355,7 +343,6 @@ class ARMEFIQEMURunner(QEMURunner):
 
 
 class ARMQEMURunner(QEMURunner):
-
     def __init__(self):
         super().__init__()
 
@@ -371,7 +358,6 @@ class ARMQEMURunner(QEMURunner):
 
 
 class ARMV5QEMURunner(ARMQEMURunner):
-
     def __init__(self):
         super().__init__()
 
@@ -379,24 +365,21 @@ class ARMV5QEMURunner(ARMQEMURunner):
         self.memory = '512m'
 
         self._dtbs = [
-            'aspeed/aspeed-bmc-opp-palmetto.dtb', 'aspeed-bmc-opp-palmetto.dtb'
+            'aspeed/aspeed-bmc-opp-palmetto.dtb',
+            'aspeed-bmc-opp-palmetto.dtb',
         ]
         self._machine = 'palmetto-bmc'
 
 
 class ARMV6QEMURunner(ARMQEMURunner):
-
     def __init__(self):
         super().__init__()
 
-        self._dtbs = [
-            'aspeed/aspeed-bmc-opp-romulus.dtb', 'aspeed-bmc-opp-romulus.dtb'
-        ]
+        self._dtbs = ['aspeed/aspeed-bmc-opp-romulus.dtb', 'aspeed-bmc-opp-romulus.dtb']
         self._machine = 'romulus-bmc'
 
 
 class ARMV7QEMURunner(ARMQEMURunner, ARMEFIQEMURunner):
-
     def __init__(self):
         super().__init__()
 
@@ -414,9 +397,10 @@ class ARMV7QEMURunner(ARMQEMURunner, ARMEFIQEMURunner):
         # 32-bit EL1 is not supported on all cores so support for it must be
         # explicitly queried via the KVM_CHECK_EXTENSION ioctl().
         try:
-            subprocess.run(Path(utils.BOOT_UTILS, 'utils',
-                                'aarch64_32_bit_el1_supported'),
-                           check=True)
+            subprocess.run(
+                Path(utils.BOOT_UTILS, 'utils', 'aarch64_32_bit_el1_supported'),
+                check=True,
+            )
         except subprocess.CalledProcessError:
             return False
 
@@ -437,14 +421,12 @@ class ARMV7QEMURunner(ARMQEMURunner, ARMEFIQEMURunner):
 
 
 class ARM64QEMURunner(ARMEFIQEMURunner):
-
     def __init__(self):
         super().__init__()
 
         self.cmdline += ['console=ttyAMA0', 'earlycon']
         self.supports_efi = True
-        self.use_kvm = platform.machine() == 'aarch64' and \
-                       self._have_dev_kvm_access()
+        self.use_kvm = platform.machine() == 'aarch64' and self._have_dev_kvm_access()
 
         self._default_kernel_path = Path('arch/arm64/boot/Image.gz')
         self._initrd_arch = 'arm64'
@@ -498,7 +480,6 @@ class ARM64QEMURunner(ARMEFIQEMURunner):
 
 
 class ARM64BEQEMURunner(ARM64QEMURunner):
-
     def __init__(self):
         super().__init__()
 
@@ -508,7 +489,6 @@ class ARM64BEQEMURunner(ARM64QEMURunner):
 
 
 class LoongArchQEMURunner(QEMURunner):
-
     def __init__(self):
         super().__init__()
 
@@ -516,13 +496,11 @@ class LoongArchQEMURunner(QEMURunner):
         self._default_kernel_path = Path('arch/loongarch/boot/vmlinuz.efi')
         self._initrd_arch = 'loongarch'
 
-        bios = Path(utils.BOOT_UTILS, 'images', self._initrd_arch,
-                    'QEMU_EFI.fd')
+        bios = Path(utils.BOOT_UTILS, 'images', self._initrd_arch, 'QEMU_EFI.fd')
         if not bios.exists():
             bios.parent.mkdir(exist_ok=True, parents=True)
             firmware_url = f"https://github.com/loongson/Firmware/raw/main/LoongArchVirtMachine/{bios.name}"
-            utils.green(
-                f"Downloading LoongArch firmware from {firmware_url}...")
+            utils.green(f"Downloading LoongArch firmware from {firmware_url}...")
             curl_cmd = ['curl', '-LSs', '-o', bios, firmware_url]
             subprocess.run(curl_cmd, check=True)
 
@@ -532,13 +510,12 @@ class LoongArchQEMURunner(QEMURunner):
             '-cpu', 'la464',
             '-bios', bios,
             '-no-reboot',
-        ]  # yapf: disable
+        ]  # fmt: off
         self.memory = '2G'
         self.smp = 2
 
 
 class M68KQEMURunner(QEMURunner):
-
     def __init__(self):
         super().__init__()
 
@@ -549,11 +526,10 @@ class M68KQEMURunner(QEMURunner):
             '-cpu', 'm68040',
             '-M', 'q800',
             '-no-reboot',
-        ]  # yapf: disable
+        ]  # fmt: off
 
 
 class MIPSQEMURunner(QEMURunner):
-
     def __init__(self):
         super().__init__()
 
@@ -563,7 +539,6 @@ class MIPSQEMURunner(QEMURunner):
 
 
 class MIPSELQEMURunner(MIPSQEMURunner):
-
     def __init__(self):
         super().__init__()
 
@@ -571,7 +546,6 @@ class MIPSELQEMURunner(MIPSQEMURunner):
 
 
 class PowerPC32QEMURunner(QEMURunner):
-
     def __init__(self):
         super().__init__()
 
@@ -590,7 +564,6 @@ class PowerPC32QEMURunner(QEMURunner):
 
 
 class PowerPC32MacQEMURunner(PowerPC32QEMURunner):
-
     def __init__(self):
         super().__init__()
 
@@ -599,7 +572,6 @@ class PowerPC32MacQEMURunner(PowerPC32QEMURunner):
 
 
 class PowerPC64QEMURunner(QEMURunner):
-
     def __init__(self):
         super().__init__()
 
@@ -609,11 +581,10 @@ class PowerPC64QEMURunner(QEMURunner):
             '-cpu', 'power8',
             '-machine', 'pseries',
             '-vga', 'none',
-        ]  # yapf: disable
+        ]  # fmt: off
 
 
 class PowerPC64LEQEMURunner(QEMURunner):
-
     def __init__(self):
         super().__init__()
 
@@ -625,11 +596,10 @@ class PowerPC64LEQEMURunner(QEMURunner):
             '-device', 'ipmi-bmc-sim,id=bmc0',
             '-device', 'isa-ipmi-bt,bmc=bmc0,irq=10',
             '-machine', 'powernv',
-        ]  # yapf: disable
+        ]  # fmt: off
 
 
 class RISCVQEMURunner(QEMURunner):
-
     def __init__(self):
         super().__init__()
 
@@ -649,7 +619,6 @@ class RISCVQEMURunner(QEMURunner):
 
 
 class S390QEMURunner(QEMURunner):
-
     def __init__(self):
         super().__init__()
 
@@ -660,7 +629,6 @@ class S390QEMURunner(QEMURunner):
 
 
 class Sparc64QEMURunner(QEMURunner):
-
     def __init__(self):
         super().__init__()
 
@@ -671,13 +639,11 @@ class Sparc64QEMURunner(QEMURunner):
 
 
 class X86QEMURunner(QEMURunner):
-
     def __init__(self):
         super().__init__()
 
         self.cmdline += ['console=ttyS0', 'earlycon=uart8250,io,0x3f8']
-        self.use_kvm = platform.machine() == 'x86_64' and \
-                       self._have_dev_kvm_access()
+        self.use_kvm = platform.machine() == 'x86_64' and self._have_dev_kvm_access()
 
         self._default_kernel_path = Path('arch/x86/boot/bzImage')
         self._initrd_arch = 'x86'
@@ -695,7 +661,6 @@ class X86QEMURunner(QEMURunner):
 
 
 class X8664QEMURunner(X86QEMURunner):
-
     def __init__(self):
         super().__init__()
 
@@ -721,8 +686,9 @@ class X8664QEMURunner(X86QEMURunner):
                 Path('OVMF/OVMF_VARS.fd'),  # Debian and Ubuntu
             ]
             ovmf_vars = utils.find_first_file(usr_share, ovmf_vars_locations)
-            self._efi_vars = Path(utils.BOOT_UTILS, 'images',
-                                  self._initrd_arch, ovmf_vars.name)
+            self._efi_vars = Path(
+                utils.BOOT_UTILS, 'images', self._initrd_arch, ovmf_vars.name
+            )
             # This file is in /usr/share, so it must be copied in order to be
             # modified.
             shutil.copyfile(ovmf_vars, self._efi_vars)
@@ -746,20 +712,20 @@ def guess_arch(kernel_arg):
     #
     # Note: 'required=False' just to provide our own exception.
     vmlinux_locations = ['vmlinux', '../../../vmlinux']
-    if not (vmlinux := utils.find_first_file(
-            kernel_dir, vmlinux_locations, required=False)):
+    if not (
+        vmlinux := utils.find_first_file(kernel_dir, vmlinux_locations, required=False)
+    ):
         raise RuntimeError(
-            'Architecture was not provided and vmlinux could not be found!')
+            'Architecture was not provided and vmlinux could not be found!'
+        )
 
     if not (file := shutil.which('file')):
-        raise RuntimeError(
-            "Architecture was not provided and 'file' is not installed!")
+        raise RuntimeError("Architecture was not provided and 'file' is not installed!")
 
     # Get output of file
-    file_out = subprocess.run([file, vmlinux],
-                              capture_output=True,
-                              check=True,
-                              text=True).stdout.strip()
+    file_out = subprocess.run(
+        [file, vmlinux], capture_output=True, check=True, text=True
+    ).stdout.strip()
 
     # Unfortunately, 'file' is not terribly precise when it comes to
     # microarchitecture or architecture revisions. As such, there are certain
@@ -785,7 +751,7 @@ def guess_arch(kernel_arg):
         'ELF 64-bit MSB executable, SPARC V9': 'sparc64',
         'ELF 32-bit LSB executable, Intel 80386': 'x86',
         'ELF 64-bit LSB executable, x86-64': 'x86_64',
-    }  # yapf: disable
+    }  # fmt: off
     for string, value in file_rosetta.items():
         if string in file_out:
             if value == 'ambiguous':
@@ -806,73 +772,73 @@ def parse_arguments():
         '-a',
         '--architecture',
         choices=SUPPORTED_ARCHES,
-        help=
-        "The architecture to boot. If omitted, value will be guessed based on 'vmlinux' if available. Possible values are: %(choices)s",
-        metavar='ARCH')
-    parser.add_argument('--efi',
-                        action='store_true',
-                        help='Boot kernel via UEFI (x86_64 only)')
+        help="The architecture to boot. If omitted, value will be guessed based on 'vmlinux' if available. Possible values are: %(choices)s",
+        metavar='ARCH',
+    )
+    parser.add_argument(
+        '--efi', action='store_true', help='Boot kernel via UEFI (x86_64 only)'
+    )
     parser.add_argument(
         '-g',
         '--gdb',
         action='store_true',
-        help="Start QEMU with '-s -S' then launch gdb on 'vmlinux'")
+        help="Start QEMU with '-s -S' then launch gdb on 'vmlinux'",
+    )
     parser.add_argument(
         '--gdb-bin',
         default='gdb-multiarch',
-        help='gdb binary to use for debugging (default: gdb-multiarch)')
+        help='gdb binary to use for debugging (default: gdb-multiarch)',
+    )
     parser.add_argument(
         '--gh-json-file',
-        help=
-        'Use file for downloading rootfs images, instead of querying GitHub API directly'
+        help='Use file for downloading rootfs images, instead of querying GitHub API directly',
     )
     parser.add_argument(
         '-I',
         '--initrd',
-        help=
-        'Initial ramdisk to use (default: Download ramdisk from ClangBuiltLinux/boot-utils releases)'
+        help='Initial ramdisk to use (default: Download ramdisk from ClangBuiltLinux/boot-utils releases)',
     )
     parser.add_argument(
         '-k',
         '--kernel-location',
         required=True,
-        help='Absolute or relative path to kernel image or build folder.')
-    parser.add_argument('--append',
-                        help='Append items to kernel cmdline',
-                        nargs='+')
+        help='Absolute or relative path to kernel image or build folder.',
+    )
+    parser.add_argument('--append', help='Append items to kernel cmdline', nargs='+')
     parser.add_argument(
         '--no-kvm',
         action='store_true',
-        help='Do not use KVM for accelration even when supported.')
+        help='Do not use KVM for accelration even when supported.',
+    )
     parser.add_argument(
         '-i',
         '--interactive',
         '--shell',
         action='store_true',
-        help='Instead of immediately shutting down machine, spawn a shell.')
+        help='Instead of immediately shutting down machine, spawn a shell.',
+    )
     parser.add_argument(
         '-m',
         '--memory',
-        help=
-        "Value for '-m' QEMU option (default: generally '512m', depends on machine)",
+        help="Value for '-m' QEMU option (default: generally '512m', depends on machine)",
     )
     parser.add_argument(
         '-M',
         '--modules',
-        help=
-        'Path to .cpio generated with the Linux kernel\'s "modules-cpio-pkg" target'
+        help='Path to .cpio generated with the Linux kernel\'s "modules-cpio-pkg" target',
     )
     parser.add_argument(
         '-s',
         '--smp',
         type=int,
-        help=
-        'Number of processors for virtual machine (default: only KVM machines will use multiple vCPUs.)',
+        help='Number of processors for virtual machine (default: only KVM machines will use multiple vCPUs.)',
     )
-    parser.add_argument('-t',
-                        '--timeout',
-                        default='3m',
-                        help="Value to pass to 'timeout' (default: '3m')")
+    parser.add_argument(
+        '-t',
+        '--timeout',
+        default='3m',
+        help="Value to pass to 'timeout' (default: '3m')",
+    )
 
     return parser.parse_args()
 
@@ -882,7 +848,8 @@ if __name__ == '__main__':
 
     if not (kernel_location := Path(args.kernel_location).resolve()).exists():
         raise FileNotFoundError(
-            f"Supplied kernel location ('{kernel_location}') does not exist!")
+            f"Supplied kernel location ('{kernel_location}') does not exist!"
+        )
 
     if not (arch := args.architecture):
         arch = guess_arch(kernel_location)
@@ -938,8 +905,7 @@ if __name__ == '__main__':
 
     if args.initrd:
         if not (initrd := Path(args.initrd).resolve()).exists():
-            raise FileNotFoundError(
-                f"Supplied initrd ('{initrd}') does not exist?")
+            raise FileNotFoundError(f"Supplied initrd ('{initrd}') does not exist?")
         runner.initrd = initrd
 
     if args.memory:
@@ -948,7 +914,8 @@ if __name__ == '__main__':
     if args.modules:
         if not (modules := Path(args.modules).resolve()).exists():
             raise FileNotFoundError(
-                f"Supplied modules .cpio ('{modules}') does not exist?")
+                f"Supplied modules .cpio ('{modules}') does not exist?"
+            )
         if not args.memory:
             utils.yellow(
                 'Memory not specified, the default may be too small for modules...'
