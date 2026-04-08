@@ -39,7 +39,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def run_kernel(kernel_image, rootfs, interactive):
+def run_kernel(kernel_image: Path, rootfs: Path, interactive: bool) -> None:
     """
     Run UML command with path to rootfs and additional arguments based on user
     input.
@@ -61,9 +61,10 @@ if __name__ == '__main__':
 
     kernel = utils.get_full_kernel_path(args.kernel_location, "linux")
 
-    initrd_args = {'rootfs_format': 'ext4'}
-    if args.gh_json_file:
-        initrd_args['gh_json_file'] = Path(args.gh_json_file).resolve()
-    initrd = utils.prepare_initrd('x86_64', **initrd_args)
+    initrd = utils.prepare_initrd(
+        'x86_64',
+        rootfs_format='ext4',
+        gh_json_file=Path(args.gh_json_file).resolve() if args.gh_json_file else None,
+    )
 
     run_kernel(kernel, initrd, args.interactive)
