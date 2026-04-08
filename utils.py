@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 
+from collections.abc import Iterable
 import json
 import os
 from pathlib import Path
 import subprocess
 import shutil
 import sys
+from typing import Any, NoReturn, Optional, Union
 
 BOOT_UTILS = Path(__file__).resolve().parent
+UNINIT_PATH = Path('/uninitialized')
 REPO = 'ClangBuiltLinux/boot-utils'
 
 
-def check_cmd(cmd):
+def check_cmd(cmd: str) -> None:
     """
     Checks if external command is available in PATH, erroring out if it is not
     available.
@@ -25,7 +28,7 @@ def check_cmd(cmd):
         )
 
 
-def die(string):
+def die(string: str) -> NoReturn:
     """
     Prints a string in bold red then exits with an error code of 1.
 
@@ -65,7 +68,11 @@ def download_initrd(gh_json, local_dest):
     raise RuntimeError(f"Failed to find {remote_file} in downloads of {url}?")
 
 
-def find_first_file(relative_root, possible_files, required=True):
+def find_first_file(
+    relative_root: Path,
+    possible_files: Iterable[Union[Path, str]],
+    required: bool = True,
+) -> Path:
     """
     Attempts to find the first option available in the list of files relative
     to a specified root folder.
@@ -90,10 +97,12 @@ def find_first_file(relative_root, possible_files, required=True):
         raise FileNotFoundError(
             f"No files from list ('{files_str}') could be found within '{relative_root}'!",
         )
-    return None
+    return UNINIT_PATH
 
 
-def get_full_kernel_path(kernel_location, image, arch=None):
+def get_full_kernel_path(
+    kernel_location: Union[Path, str], image: str, arch: Optional[str] = None
+) -> Path:
     """
     Get the full path to a kernel image based on the architecture and image
     name if necessary.
@@ -116,12 +125,12 @@ def get_full_kernel_path(kernel_location, image, arch=None):
     elif image in ("vmlinux", "linux"):
         kernel = kernel_location.joinpath(image)
     # Otherwise, it is in the architecture's boot directory
-    else:
-        if not arch:
-            die(
-                f"Kernel image ('{image}') is in the arch/ directory but 'arch' was not provided!"
-            )
+    elif arch:
         kernel = kernel_location.joinpath("arch", arch, "boot", image)
+    else:
+        die(
+            f"Kernel image ('{image}') is in the arch/ directory but 'arch' was not provided!"
+        )
 
     if not kernel.exists():
         die(f"Kernel ('{kernel}') does not exist!")
@@ -129,7 +138,7 @@ def get_full_kernel_path(kernel_location, image, arch=None):
     return kernel.resolve()
 
 
-def get_gh_json(endpoint):
+def get_gh_json(endpoint: str) -> dict[str, Any]:
     """
     Query a GitHub API endpoint.
 
@@ -162,7 +171,7 @@ def get_gh_json(endpoint):
     return json.loads(curl_out)
 
 
-def green(string):
+def green(string: str) -> None:
     """
     Prints string in bold green.
 
@@ -172,7 +181,12 @@ def green(string):
     print(f"\n\033[01;32m{string}\033[0m", flush=True)
 
 
-def prepare_initrd(architecture, rootfs_format='cpio', gh_json_file=None, modules=None):
+def prepare_initrd(
+    architecture: str,
+    rootfs_format: str = 'cpio',
+    gh_json_file: Optional[Path] = None,
+    modules: Optional[Path] = None,
+) -> Path:
     """
     Returns a decompressed initial ramdisk.
 
@@ -185,7 +199,7 @@ def prepare_initrd(architecture, rootfs_format='cpio', gh_json_file=None, module
 
     # If the user supplied a GitHub release JSON file, we do not need to bother
     # querying the GitHub API at all.
-    if gh_json_file:
+    if gh_json_file and gh_json_file != UNINIT_PATH:
         if not gh_json_file.exists():
             raise FileNotFoundError(
                 f"Provided GitHub JSON file ('{gh_json_file}') does not exist!"
@@ -228,7 +242,7 @@ def prepare_initrd(architecture, rootfs_format='cpio', gh_json_file=None, module
     (dst := src.with_suffix('')).unlink(missing_ok=True)
     subprocess.run(['zstd', '-d', src, '-o', dst, '-q'], check=True)
 
-    if modules:
+    if modules and modules != UNINIT_PATH:
         # "new" cpio magic bytes
         cpio_sig = bytes([0x30, 0x37, 0x30, 0x37, 0x30, 0x31])
         with modules.open('rb') as module_file:
@@ -238,16 +252,21 @@ def prepare_initrd(architecture, rootfs_format='cpio', gh_json_file=None, module
                 )
 
         (new_dst := dst.parent.joinpath('rootfs-modules.cpio')).unlink(missing_ok=True)
-        with subprocess.Popen(
-            ['cat', dst, modules], stdout=subprocess.PIPE, stderr=subprocess.STDOUT
-        ) as proc, new_dst.open('xb') as dst_file:
+        with (
+            subprocess.Popen(
+                ['cat', dst, modules], stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+            ) as proc,
+            new_dst.open('xb') as dst_file,
+        ):
+            if not proc.stdout:
+                raise RuntimeError('cat stdout is None?')
             dst_file.write(proc.stdout.read())
         dst = new_dst
 
     return dst
 
 
-def red(string):
+def red(string: str) -> None:
     """
     Prints string in bold red.
 
@@ -257,7 +276,7 @@ def red(string):
     print(f"\n\033[01;31m{string}\033[0m", flush=True)
 
 
-def yellow(string):
+def yellow(string: str) -> None:
     """
     Prints string in bold yellow.
 
