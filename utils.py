@@ -238,9 +238,12 @@ def prepare_initrd(architecture, rootfs_format='cpio', gh_json_file=None, module
                 )
 
         (new_dst := dst.parent.joinpath('rootfs-modules.cpio')).unlink(missing_ok=True)
-        with subprocess.Popen(
-            ['cat', dst, modules], stdout=subprocess.PIPE, stderr=subprocess.STDOUT
-        ) as proc, new_dst.open('xb') as dst_file:
+        with (
+            subprocess.Popen(
+                ['cat', dst, modules], stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+            ) as proc,
+            new_dst.open('xb') as dst_file,
+        ):
             dst_file.write(proc.stdout.read())
         dst = new_dst
 

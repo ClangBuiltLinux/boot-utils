@@ -226,8 +226,9 @@ class QEMURunner:
             # pylint: disable-next=unexpected-keyword-arg
             with subprocess.Popen(qemu_cmd, **popen_kwargs) as qemu_proc:
                 utils.green(f"Starting {self.gdb_bin}...")
-                with subprocess.Popen(gdb_cmd) as gdb_proc, contextlib.suppress(
-                    KeyboardInterrupt
+                with (
+                    subprocess.Popen(gdb_cmd) as gdb_proc,
+                    contextlib.suppress(KeyboardInterrupt),
                 ):
                     gdb_proc.wait()
 
