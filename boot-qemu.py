@@ -523,10 +523,12 @@ class M68KQEMURunner(QEMURunner):
         self._default_kernel_path = Path('vmlinux')
         self._initrd_arch = self._qemu_arch = 'm68k'
         self._qemu_args += [
+            '-audio', 'none',
             '-cpu', 'm68040',
             '-M', 'q800',
             '-no-reboot',
         ]  # fmt: off
+        self.memory = '512m'
 
 
 class MIPSQEMURunner(QEMURunner):
