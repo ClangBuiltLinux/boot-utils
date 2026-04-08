@@ -528,6 +528,7 @@ class M68KQEMURunner(QEMURunner):
             '-M', 'q800',
             '-no-reboot',
         ]  # fmt: off
+        self.memory = '512m'
 
 
 class MIPSQEMURunner(QEMURunner):
