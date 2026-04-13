@@ -136,7 +136,11 @@ class QEMURunner:
         strings = subprocess.run('strings', capture_output=True, check=True, input=decomp.stdout)
         strings_stdout = strings.stdout.decode(encoding='utf-8', errors='ignore')
 
-        if not (match := re.search(r'^Linux version (\d+\.\d+\.\d+)', strings_stdout, flags=re.M)):
+        if not (
+            match := re.search(
+                r'^Linux version (\d+\.\d+\.\d+)', strings_stdout, flags=re.MULTILINE
+            )
+        ):
             raise RuntimeError(f"Could not find Linux version in {self.kernel}?")
 
         return tuple(int(x) for x in match.groups()[0].split('.'))
