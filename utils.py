@@ -128,9 +128,7 @@ def get_full_kernel_path(
     elif arch:
         kernel = kernel_location.joinpath("arch", arch, "boot", image)
     else:
-        die(
-            f"Kernel image ('{image}') is in the arch/ directory but 'arch' was not provided!"
-        )
+        die(f"Kernel image ('{image}') is in the arch/ directory but 'arch' was not provided!")
 
     if not kernel.exists():
         die(f"Kernel ('{kernel}') does not exist!")
@@ -160,13 +158,9 @@ def get_gh_json(endpoint: str) -> dict[str, Any]:
     curl_cmd.append(endpoint)
 
     try:
-        curl_out = subprocess.run(
-            curl_cmd, capture_output=True, check=True, text=True
-        ).stdout
+        curl_out = subprocess.run(curl_cmd, capture_output=True, check=True, text=True).stdout
     except subprocess.CalledProcessError as err:
-        raise RuntimeError(
-            f"Failed to query GitHub API at {endpoint}: {err.stderr}"
-        ) from err
+        raise RuntimeError(f"Failed to query GitHub API at {endpoint}: {err.stderr}") from err
 
     return json.loads(curl_out)
 
@@ -201,9 +195,7 @@ def prepare_initrd(
     # querying the GitHub API at all.
     if gh_json_file and gh_json_file != UNINIT_PATH:
         if not gh_json_file.exists():
-            raise FileNotFoundError(
-                f"Provided GitHub JSON file ('{gh_json_file}') does not exist!"
-            )
+            raise FileNotFoundError(f"Provided GitHub JSON file ('{gh_json_file}') does not exist!")
         gh_json_rel = json.loads(gh_json_file.read_text(encoding='utf-8'))
     else:
         # Make sure that the current user is not rate limited by GitHub,
@@ -214,9 +206,7 @@ def prepare_initrd(
         # and cached the result, we can query for the latest release to make sure
         # that we are up to date.
         if (remaining := gh_json_rl['resources']['core']['remaining']) > 0:
-            gh_json_rel = get_gh_json(
-                f"https://api.github.com/repos/{REPO}/releases/latest"
-            )
+            gh_json_rel = get_gh_json(f"https://api.github.com/repos/{REPO}/releases/latest")
         elif not src.exists():
             limit = gh_json_rl['resources']['core']['limit']
             raise RuntimeError(

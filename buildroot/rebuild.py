@@ -175,9 +175,7 @@ if __name__ == '__main__':
     if not shutil.which('zstd'):
         raise RuntimeError('zstd could not be found on your system, please install it!')
 
-    architectures = (
-        SUPPORTED_ARCHES if 'all' in args.architectures else args.architectures
-    )
+    architectures = SUPPORTED_ARCHES if 'all' in args.architectures else args.architectures
 
     download_and_extract_buildroot()
     for arch in architectures:

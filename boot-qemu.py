@@ -108,9 +108,7 @@ class QEMURunner:
         #   * <kernel_dir>/../../../.config (if the image is in arch/*/boot/)
         #   * <kernel_dir>/config (if the image is in a TuxMake folder)
         possible_locations = ['.config', '../../../.config', 'config']
-        configuration = utils.find_first_file(
-            self.kernel_dir, possible_locations, required=False
-        )
+        configuration = utils.find_first_file(self.kernel_dir, possible_locations, required=False)
 
         config_nr_cpus = 8  # sensible default based on treewide defaults,
         if configuration != utils.UNINIT_PATH:
@@ -136,16 +134,10 @@ class QEMURunner:
         decomp = subprocess.run(decomp_cmd, capture_output=True, check=True)
 
         utils.check_cmd('strings')
-        strings = subprocess.run(
-            'strings', capture_output=True, check=True, input=decomp.stdout
-        )
+        strings = subprocess.run('strings', capture_output=True, check=True, input=decomp.stdout)
         strings_stdout = strings.stdout.decode(encoding='utf-8', errors='ignore')
 
-        if not (
-            match := re.search(
-                r'^Linux version (\d+\.\d+\.\d+)', strings_stdout, flags=re.M
-            )
-        ):
+        if not (match := re.search(r'^Linux version (\d+\.\d+\.\d+)', strings_stdout, flags=re.M)):
             raise RuntimeError(f"Could not find Linux version in {self.kernel}?")
 
         return tuple(int(x) for x in match.groups()[0].split('.'))
@@ -505,7 +497,9 @@ class LoongArchQEMURunner(QEMURunner):
         bios = Path(utils.BOOT_UTILS, 'images', self._initrd_arch, 'QEMU_EFI.fd')
         if not bios.exists():
             bios.parent.mkdir(exist_ok=True, parents=True)
-            firmware_url = f"https://github.com/loongson/Firmware/raw/main/LoongArchVirtMachine/{bios.name}"
+            firmware_url = (
+                f"https://github.com/loongson/Firmware/raw/main/LoongArchVirtMachine/{bios.name}"
+            )
             utils.green(f"Downloading LoongArch firmware from {firmware_url}...")
             curl_cmd = ['curl', '-LSs', '-o', bios, firmware_url]
             subprocess.run(curl_cmd, check=True)
@@ -694,9 +688,7 @@ class X8664QEMURunner(X86QEMURunner):
                 Path('OVMF/OVMF_VARS.fd'),  # Debian and Ubuntu
             ]
             ovmf_vars = utils.find_first_file(usr_share, ovmf_vars_locations)
-            self._efi_vars = Path(
-                utils.BOOT_UTILS, 'images', self._initrd_arch, ovmf_vars.name
-            )
+            self._efi_vars = Path(utils.BOOT_UTILS, 'images', self._initrd_arch, ovmf_vars.name)
             # This file is in /usr/share, so it must be copied in order to be
             # modified.
             shutil.copyfile(ovmf_vars, self._efi_vars)
@@ -720,12 +712,8 @@ def guess_arch(kernel_arg: Path) -> str:
     #
     # Note: 'required=False' just to provide our own exception.
     vmlinux_locations = ['vmlinux', '../../../vmlinux']
-    if not (
-        vmlinux := utils.find_first_file(kernel_dir, vmlinux_locations, required=False)
-    ):
-        raise RuntimeError(
-            'Architecture was not provided and vmlinux could not be found!'
-        )
+    if not (vmlinux := utils.find_first_file(kernel_dir, vmlinux_locations, required=False)):
+        raise RuntimeError('Architecture was not provided and vmlinux could not be found!')
 
     if not (file := shutil.which('file')):
         raise RuntimeError("Architecture was not provided and 'file' is not installed!")
@@ -783,9 +771,7 @@ def parse_arguments():
         help="The architecture to boot. If omitted, value will be guessed based on 'vmlinux' if available. Possible values are: %(choices)s",
         metavar='ARCH',
     )
-    parser.add_argument(
-        '--efi', action='store_true', help='Boot kernel via UEFI (x86_64 only)'
-    )
+    parser.add_argument('--efi', action='store_true', help='Boot kernel via UEFI (x86_64 only)')
     parser.add_argument(
         '-g',
         '--gdb',
@@ -855,9 +841,7 @@ if __name__ == '__main__':
     args = parse_arguments()
 
     if not (kernel_location := Path(args.kernel_location).resolve()).exists():
-        raise FileNotFoundError(
-            f"Supplied kernel location ('{kernel_location}') does not exist!"
-        )
+        raise FileNotFoundError(f"Supplied kernel location ('{kernel_location}') does not exist!")
 
     if not (arch := args.architecture):
         arch = guess_arch(kernel_location)
@@ -900,9 +884,7 @@ if __name__ == '__main__':
     if args.efi:
         runner.efi = runner.supports_efi
         if not runner.efi:
-            utils.yellow(
-                f"EFI boot requested on unsupported architecture ('{arch}'), ignoring..."
-            )
+            utils.yellow(f"EFI boot requested on unsupported architecture ('{arch}'), ignoring...")
 
     if args.gdb:
         runner.gdb = True
@@ -921,13 +903,9 @@ if __name__ == '__main__':
 
     if args.modules:
         if not (modules := Path(args.modules).resolve()).exists():
-            raise FileNotFoundError(
-                f"Supplied modules .cpio ('{modules}') does not exist?"
-            )
+            raise FileNotFoundError(f"Supplied modules .cpio ('{modules}') does not exist?")
         if not args.memory:
-            utils.yellow(
-                'Memory not specified, the default may be too small for modules...'
-            )
+            utils.yellow('Memory not specified, the default may be too small for modules...')
         runner.modules = modules
 
     if args.no_kvm:
