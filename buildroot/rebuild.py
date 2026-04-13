@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
-from argparse import ArgumentParser
 import datetime
 import os
-from pathlib import Path
 import shutil
 import subprocess
+from argparse import ArgumentParser
+from pathlib import Path
 
 BUILDROOT_VERSION = '2024.02.8'
 SUPPORTED_ARCHES = [
@@ -175,9 +175,7 @@ if __name__ == '__main__':
     if not shutil.which('zstd'):
         raise RuntimeError('zstd could not be found on your system, please install it!')
 
-    architectures = (
-        SUPPORTED_ARCHES if 'all' in args.architectures else args.architectures
-    )
+    architectures = SUPPORTED_ARCHES if 'all' in args.architectures else args.architectures
 
     download_and_extract_buildroot()
     for arch in architectures:
