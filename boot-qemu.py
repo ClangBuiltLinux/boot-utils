@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
 # pylint: disable=invalid-name
 
-from argparse import ArgumentParser
-from collections.abc import Sequence
 import contextlib
 import os
-from pathlib import Path
 import platform
 import re
 import shlex
 import shutil
 import subprocess
 import sys
+from argparse import ArgumentParser
+from collections.abc import Sequence
+from pathlib import Path
 from typing import Any, Union
 
 import utils
-
 
 SUPPORTED_ARCHES = [
     'arm',

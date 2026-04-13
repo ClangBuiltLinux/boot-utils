@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
-from collections.abc import Iterable
 import json
 import os
-from pathlib import Path
-import subprocess
 import shutil
+import subprocess
 import sys
+from collections.abc import Iterable
+from pathlib import Path
 from typing import Any, NoReturn, Optional, Union
 
 BOOT_UTILS = Path(__file__).resolve().parent

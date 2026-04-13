@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
-from argparse import ArgumentParser
 import datetime
 import os
-from pathlib import Path
 import shutil
 import subprocess
+from argparse import ArgumentParser
+from pathlib import Path
 
 BUILDROOT_VERSION = '2024.02.8'
 SUPPORTED_ARCHES = [
