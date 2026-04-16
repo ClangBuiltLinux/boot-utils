@@ -126,7 +126,7 @@ def get_full_kernel_path(kernel_location: Path | str, image: str, arch: str | No
         kernel = kernel_location
     # If the image is an uncompressed vmlinux or a UML image, it is in the
     # root of the build folder
-    elif image in ("vmlinux", "linux"):
+    elif image in {"vmlinux", "linux"}:
         kernel = kernel_location.joinpath(image)
     # Otherwise, it is in the architecture's boot directory
     elif arch:
