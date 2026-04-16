@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # pylint: disable=invalid-name
 
+from __future__ import annotations
+
 import contextlib
 import os
 import platform
@@ -10,11 +12,13 @@ import shutil
 import subprocess
 import sys
 from argparse import ArgumentParser
-from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Union
+from typing import TYPE_CHECKING, Any
 
 import utils
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 SUPPORTED_ARCHES = [
     'arm',
@@ -70,7 +74,7 @@ class QEMURunner:
         self._initrd_arch: str = ''
         self._kvm_cpu: list[str] = ['host']
         self._qemu_arch: str = ''
-        self._qemu_args: list[Union[Path, str]] = [
+        self._qemu_args: list[Path | str] = [
             '-display', 'none',
             '-nodefaults',
         ]  # fmt: off
@@ -334,7 +338,7 @@ class QEMURunner:
 
 
 class ARMEFIQEMURunner(QEMURunner):
-    def _setup_efi(self, possible_locations: Sequence[Union[Path, str]]) -> None:
+    def _setup_efi(self, possible_locations: Sequence[Path | str]) -> None:
         # Sizing the images to 64M is recommended by "Prepare the firmware" section at
         # https://mirrors.edge.kernel.org/pub/linux/kernel/people/will/docs/qemu/qemu-arm64-howto.html
         efi_img_size = 64 * 1024 * 1024  # 64M

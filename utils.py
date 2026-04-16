@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 
+from __future__ import annotations
+
 import json
 import os
 import shutil
 import subprocess
 import sys
-from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, NoReturn, Optional, Union
+from typing import TYPE_CHECKING, Any, NoReturn
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 BOOT_UTILS = Path(__file__).resolve().parent
 UNINIT_PATH = Path('/uninitialized')
@@ -71,7 +75,7 @@ def download_initrd(gh_json, local_dest):
 
 def find_first_file(
     relative_root: Path,
-    possible_files: Iterable[Union[Path, str]],
+    possible_files: Iterable[Path | str],
     required: bool = True,
 ) -> Path:
     """
@@ -102,9 +106,7 @@ def find_first_file(
     return UNINIT_PATH
 
 
-def get_full_kernel_path(
-    kernel_location: Union[Path, str], image: str, arch: Optional[str] = None
-) -> Path:
+def get_full_kernel_path(kernel_location: Path | str, image: str, arch: str | None = None) -> Path:
     """
     Get the full path to a kernel image based on the architecture and image
     name if necessary.
@@ -181,8 +183,8 @@ def green(string: str) -> None:
 def prepare_initrd(
     architecture: str,
     rootfs_format: str = 'cpio',
-    gh_json_file: Optional[Path] = None,
-    modules: Optional[Path] = None,
+    gh_json_file: Path | None = None,
+    modules: Path | None = None,
 ) -> Path:
     """
     Returns a decompressed initial ramdisk.
