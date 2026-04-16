@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 
+from __future__ import annotations
+
 import json
 import os
 import shutil
 import subprocess
 import sys
-from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, NoReturn, Optional, Union
+from typing import TYPE_CHECKING, Any, NoReturn
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 BOOT_UTILS = Path(__file__).resolve().parent
 UNINIT_PATH = Path('/uninitialized')
@@ -65,12 +69,13 @@ def download_initrd(gh_json, local_dest):
 
             return
 
-    raise RuntimeError(f"Failed to find {remote_file} in downloads of {url}?")
+    msg = f"Failed to find {remote_file} in downloads of {url}?"
+    raise RuntimeError(msg)
 
 
 def find_first_file(
     relative_root: Path,
-    possible_files: Iterable[Union[Path, str]],
+    possible_files: Iterable[Path | str],
     required: bool = True,
 ) -> Path:
     """
@@ -94,15 +99,14 @@ def find_first_file(
             return full_path
     if required:
         files_str = "', '".join([str(elem) for elem in possible_files])
+        msg = f"No files from list ('{files_str}') could be found within '{relative_root}'!"
         raise FileNotFoundError(
-            f"No files from list ('{files_str}') could be found within '{relative_root}'!",
+            msg,
         )
     return UNINIT_PATH
 
 
-def get_full_kernel_path(
-    kernel_location: Union[Path, str], image: str, arch: Optional[str] = None
-) -> Path:
+def get_full_kernel_path(kernel_location: Path | str, image: str, arch: str | None = None) -> Path:
     """
     Get the full path to a kernel image based on the architecture and image
     name if necessary.
@@ -122,7 +126,7 @@ def get_full_kernel_path(
         kernel = kernel_location
     # If the image is an uncompressed vmlinux or a UML image, it is in the
     # root of the build folder
-    elif image in ("vmlinux", "linux"):
+    elif image in {"vmlinux", "linux"}:
         kernel = kernel_location.joinpath(image)
     # Otherwise, it is in the architecture's boot directory
     elif arch:
@@ -160,7 +164,8 @@ def get_gh_json(endpoint: str) -> dict[str, Any]:
     try:
         curl_out = subprocess.run(curl_cmd, capture_output=True, check=True, text=True).stdout
     except subprocess.CalledProcessError as err:
-        raise RuntimeError(f"Failed to query GitHub API at {endpoint}: {err.stderr}") from err
+        msg = f"Failed to query GitHub API at {endpoint}: {err.stderr}"
+        raise RuntimeError(msg) from err
 
     return json.loads(curl_out)
 
@@ -178,8 +183,8 @@ def green(string: str) -> None:
 def prepare_initrd(
     architecture: str,
     rootfs_format: str = 'cpio',
-    gh_json_file: Optional[Path] = None,
-    modules: Optional[Path] = None,
+    gh_json_file: Path | None = None,
+    modules: Path | None = None,
 ) -> Path:
     """
     Returns a decompressed initial ramdisk.
@@ -195,7 +200,8 @@ def prepare_initrd(
     # querying the GitHub API at all.
     if gh_json_file and gh_json_file != UNINIT_PATH:
         if not gh_json_file.exists():
-            raise FileNotFoundError(f"Provided GitHub JSON file ('{gh_json_file}') does not exist!")
+            msg = f"Provided GitHub JSON file ('{gh_json_file}') does not exist!"
+            raise FileNotFoundError(msg)
         gh_json_rel = json.loads(gh_json_file.read_text(encoding='utf-8'))
     else:
         # Make sure that the current user is not rate limited by GitHub,
@@ -209,10 +215,11 @@ def prepare_initrd(
             gh_json_rel = get_gh_json(f"https://api.github.com/repos/{REPO}/releases/latest")
         elif not src.exists():
             limit = gh_json_rl['resources']['core']['limit']
-            raise RuntimeError(
+            msg = (
                 f"Cannot query GitHub API for latest images release due to rate limit (remaining: {remaining}, limit: {limit}) and {src} does not exist already! "
                 'Download it manually or supply a GitHub personal access token via the GITHUB_TOKEN environment variable to make an authenticated GitHub API request.'
             )
+            raise RuntimeError(msg)
 
     # Download the ramdisk if it is not already downloaded
     if not src.exists():
@@ -237,9 +244,8 @@ def prepare_initrd(
         cpio_sig = bytes([0x30, 0x37, 0x30, 0x37, 0x30, 0x31])
         with modules.open('rb') as module_file:
             if module_file.read(6) != cpio_sig:
-                raise RuntimeError(
-                    f"{modules} does not have cpio magic bytes, was it generated with the 'modules-cpio-pkg' target?"
-                )
+                msg = f"{modules} does not have cpio magic bytes, was it generated with the 'modules-cpio-pkg' target?"
+                raise RuntimeError(msg)
 
         (new_dst := dst.parent.joinpath('rootfs-modules.cpio')).unlink(missing_ok=True)
         with (
@@ -249,7 +255,8 @@ def prepare_initrd(
             new_dst.open('xb') as dst_file,
         ):
             if not proc.stdout:
-                raise RuntimeError('cat stdout is None?')
+                msg = 'cat stdout is None?'
+                raise RuntimeError(msg)
             dst_file.write(proc.stdout.read())
         dst = new_dst
 
