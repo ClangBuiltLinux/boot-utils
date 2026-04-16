@@ -171,7 +171,8 @@ class QEMURunner:
             raise RuntimeError(msg)
         return tuple(int(x) for x in match.groups()[0].split('.'))
 
-    def _have_dev_kvm_access(self) -> bool:
+    @staticmethod
+    def _have_dev_kvm_access() -> bool:
         return os.access('/dev/kvm', os.R_OK | os.W_OK)
 
     def _prepare_initrd(self) -> Path:
