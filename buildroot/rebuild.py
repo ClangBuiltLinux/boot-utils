@@ -64,7 +64,8 @@ def build_image(architecture, edit_config, savedefconfig):
 
     for image in images:
         if not image.exists():
-            raise FileNotFoundError(f"{image} could not be found! Did the build error?")
+            msg = f"{image} could not be found! Did the build error?"
+            raise FileNotFoundError(msg)
         zstd_cmd = [
             'zstd',
             '-f',
@@ -112,16 +113,14 @@ def download_and_extract_buildroot():
             try:
                 subprocess.run(patch_cmd, check=True)
             except subprocess.CalledProcessError as err:
-                raise RuntimeError(
-                    f"{patch} did not apply to Buildroot {BUILDROOT_VERSION}, does it need to be updated?"
-                ) from err
+                msg = f"{patch} did not apply to Buildroot {BUILDROOT_VERSION}, does it need to be updated?"
+                raise RuntimeError(msg) from err
 
 
 def release_images():
     if not shutil.which('gh'):
-        raise RuntimeError(
-            "Could not find GitHub CLI ('gh') on your system, please install it to do releases!"
-        )
+        msg = "Could not find GitHub CLI ('gh') on your system, please install it to do releases!"
+        raise RuntimeError(msg)
 
     gh_cmd = [
         'gh',
@@ -173,7 +172,8 @@ if __name__ == '__main__':
     args = parse_arguments()
 
     if not shutil.which('zstd'):
-        raise RuntimeError('zstd could not be found on your system, please install it!')
+        msg = 'zstd could not be found on your system, please install it!'
+        raise RuntimeError(msg)
 
     architectures = SUPPORTED_ARCHES if 'all' in args.architectures else args.architectures
 

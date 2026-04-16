@@ -78,9 +78,11 @@ class QEMURunner:
 
     def _find_dtb(self) -> Path:
         if not self._dtbs:
-            raise RuntimeError('No dtbs set?')
+            msg = 'No dtbs set?'
+            raise RuntimeError(msg)
         if self.kernel == utils.UNINIT_PATH:
-            raise RuntimeError('Cannot locate dtb without kernel')
+            msg = 'Cannot locate dtb without kernel'
+            raise RuntimeError(msg)
 
         # If we are in a boot folder, look for them in the dts folder in it.
         # Otherwise, assume there is a 'dtbs' folder in the same folder as the
@@ -90,13 +92,13 @@ class QEMURunner:
             if (dtb := Path(self.kernel.parent, dtb_dir, dtb_loc)).exists():
                 return dtb
 
-        raise FileNotFoundError(
-            f"dtb is required for booting but it could not be found at expected locations ('{self._dtbs}')"
-        )
+        msg = f"dtb is required for booting but it could not be found at expected locations ('{self._dtbs}')"
+        raise FileNotFoundError(msg)
 
     def _get_default_smp_value(self) -> int:
         if self.kernel_dir == utils.UNINIT_PATH:
-            raise RuntimeError('No kernel build folder specified?')
+            msg = 'No kernel build folder specified?'
+            raise RuntimeError(msg)
 
         # If kernel_dir is the kernel source, the configuration will be at
         # <kernel_dir>/.config
@@ -118,18 +120,21 @@ class QEMURunner:
         # Use the minimum of the number of usable processers for the script or
         # CONFIG_NR_CPUS.
         if not (usable_cpus := os.cpu_count()):
-            raise RuntimeError('Could not determine number of CPUs?')
+            msg = 'Could not determine number of CPUs?'
+            raise RuntimeError(msg)
         return min(usable_cpus, config_nr_cpus)
 
     def _get_kernel_ver_tuple(self, decomp_prog: str) -> tuple[int, ...]:
         if self.kernel == utils.UNINIT_PATH:
-            raise RuntimeError('No kernel set?')
+            msg = 'No kernel set?'
+            raise RuntimeError(msg)
 
         utils.check_cmd(decomp_prog)
         if decomp_prog == 'gzip':
             decomp_cmd = [decomp_prog, '-c', '-d', self.kernel]
         else:
-            raise RuntimeError(f"Unsupported decompression program ('{decomp_prog}')?")
+            msg = f"Unsupported decompression program ('{decomp_prog}')?"
+            raise RuntimeError(msg)
         decomp = subprocess.run(decomp_cmd, capture_output=True, check=True)
 
         utils.check_cmd('strings')
@@ -141,13 +146,15 @@ class QEMURunner:
                 r'^Linux version (\d+\.\d+\.\d+)', strings_stdout, flags=re.MULTILINE
             )
         ):
-            raise RuntimeError(f"Could not find Linux version in {self.kernel}?")
+            msg = f"Could not find Linux version in {self.kernel}?"
+            raise RuntimeError(msg)
 
         return tuple(int(x) for x in match.groups()[0].split('.'))
 
     def _get_qemu_ver_string(self) -> str:
         if self._qemu_path == utils.UNINIT_PATH:
-            raise RuntimeError('No path to QEMU set?')
+            msg = 'No path to QEMU set?'
+            raise RuntimeError(msg)
         qemu_ver = subprocess.run(
             [self._qemu_path, '--version'], capture_output=True, check=True, text=True
         )
@@ -156,7 +163,8 @@ class QEMURunner:
     def _get_qemu_ver_tuple(self) -> tuple[int, ...]:
         qemu_ver_string = self._get_qemu_ver_string()
         if not (match := re.search(r'version (\d+\.\d+.\d+)', qemu_ver_string)):
-            raise RuntimeError('Could not find QEMU version?')
+            msg = 'Could not find QEMU version?'
+            raise RuntimeError(msg)
         return tuple(int(x) for x in match.groups()[0].split('.'))
 
     def _have_dev_kvm_access(self) -> bool:
@@ -166,7 +174,8 @@ class QEMURunner:
         if self.initrd != utils.UNINIT_PATH:
             return self.initrd
         if not self._initrd_arch:
-            raise RuntimeError('No initrd architecture specified?')
+            msg = 'No initrd architecture specified?'
+            raise RuntimeError(msg)
         return utils.prepare_initrd(
             self._initrd_arch, gh_json_file=self.gh_json_file, modules=self.modules
         )
@@ -247,9 +256,11 @@ class QEMURunner:
             return
 
         if self.kernel_dir == utils.UNINIT_PATH:
-            raise RuntimeError('No kernel image or kernel build folder specified?')
+            msg = 'No kernel image or kernel build folder specified?'
+            raise RuntimeError(msg)
         if self._default_kernel_path == utils.UNINIT_PATH:
-            raise RuntimeError('No default kernel path specified?')
+            msg = 'No default kernel path specified?'
+            raise RuntimeError(msg)
 
         possible_kernel_locations = {
             Path(self._default_kernel_path),  # default (kbuild)
@@ -261,10 +272,12 @@ class QEMURunner:
         if self._qemu_path != utils.UNINIT_PATH:
             return  # already found and set
         if not self._qemu_arch:
-            raise RuntimeError('No QEMU architecture set?')
+            msg = 'No QEMU architecture set?'
+            raise RuntimeError(msg)
         qemu_bin = f"qemu-system-{self._qemu_arch}"
         if not (qemu_path := shutil.which(qemu_bin)):
-            raise RuntimeError(f'{qemu_bin} could not be found on your system?')
+            msg = f'{qemu_bin} could not be found on your system?'
+            raise RuntimeError(msg)
         self._qemu_path = Path(qemu_path)
 
     def run(self) -> None:
@@ -716,10 +729,12 @@ def guess_arch(kernel_arg: Path) -> str:
     # Note: 'required=False' just to provide our own exception.
     vmlinux_locations = ['vmlinux', '../../../vmlinux']
     if not (vmlinux := utils.find_first_file(kernel_dir, vmlinux_locations, required=False)):
-        raise RuntimeError('Architecture was not provided and vmlinux could not be found!')
+        msg = 'Architecture was not provided and vmlinux could not be found!'
+        raise RuntimeError(msg)
 
     if not (file := shutil.which('file')):
-        raise RuntimeError("Architecture was not provided and 'file' is not installed!")
+        msg = "Architecture was not provided and 'file' is not installed!"
+        raise RuntimeError(msg)
 
     # Get output of file
     file_out = subprocess.run(
@@ -754,14 +769,12 @@ def guess_arch(kernel_arg: Path) -> str:
     for string, value in file_rosetta.items():
         if string in file_out:
             if value == 'ambiguous':
-                raise RuntimeError(
-                    f"'{string}' found in '{file_out}' but the architecture is ambiguous, please explicitly specify it via '-a'!"
-                )
+                msg = f"'{string}' found in '{file_out}' but the architecture is ambiguous, please explicitly specify it via '-a'!"
+                raise RuntimeError(msg)
             return value
 
-    raise RuntimeError(
-        f"Architecture could not be deduced from '{file_out}', please explicitly specify it via '-a' or add support for it to guess_arch()!"
-    )
+    msg = f"Architecture could not be deduced from '{file_out}', please explicitly specify it via '-a' or add support for it to guess_arch()!"
+    raise RuntimeError(msg)
 
 
 def parse_arguments():
@@ -844,7 +857,8 @@ if __name__ == '__main__':
     args = parse_arguments()
 
     if not (kernel_location := Path(args.kernel_location).resolve()).exists():
-        raise FileNotFoundError(f"Supplied kernel location ('{kernel_location}') does not exist!")
+        msg = f"Supplied kernel location ('{kernel_location}') does not exist!"
+        raise FileNotFoundError(msg)
 
     if not (arch := args.architecture):
         arch = guess_arch(kernel_location)
@@ -874,8 +888,9 @@ if __name__ == '__main__':
 
     if kernel_location.is_file():
         if args.gdb and kernel_location.name != 'vmlinux':
+            msg = 'Debugging with gdb requires a kernel build folder to locate vmlinux'
             raise RuntimeError(
-                'Debugging with gdb requires a kernel build folder to locate vmlinux',
+                msg,
             )
         runner.kernel = kernel_location
     else:
@@ -898,7 +913,8 @@ if __name__ == '__main__':
 
     if args.initrd:
         if not (initrd := Path(args.initrd).resolve()).exists():
-            raise FileNotFoundError(f"Supplied initrd ('{initrd}') does not exist?")
+            msg = f"Supplied initrd ('{initrd}') does not exist?"
+            raise FileNotFoundError(msg)
         runner.initrd = initrd
 
     if args.memory:
@@ -906,7 +922,8 @@ if __name__ == '__main__':
 
     if args.modules:
         if not (modules := Path(args.modules).resolve()).exists():
-            raise FileNotFoundError(f"Supplied modules .cpio ('{modules}') does not exist?")
+            msg = f"Supplied modules .cpio ('{modules}') does not exist?"
+            raise FileNotFoundError(msg)
         if not args.memory:
             utils.yellow('Memory not specified, the default may be too small for modules...')
         runner.modules = modules
