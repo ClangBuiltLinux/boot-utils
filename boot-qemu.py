@@ -858,7 +858,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-if __name__ == '__main__':
+def main():
     args = parse_arguments()
 
     if not (kernel_location := Path(args.kernel_location).resolve()).exists():
@@ -943,3 +943,7 @@ if __name__ == '__main__':
     runner.timeout = args.timeout
 
     runner.run()
+
+
+if __name__ == '__main__':
+    main()

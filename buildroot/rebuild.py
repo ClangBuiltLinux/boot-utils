@@ -168,7 +168,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-if __name__ == '__main__':
+def main():
     args = parse_arguments()
 
     if not shutil.which('zstd'):
@@ -183,3 +183,7 @@ if __name__ == '__main__':
 
     if args.release:
         release_images()
+
+
+if __name__ == '__main__':
+    main()
