@@ -49,6 +49,7 @@ class QEMURunner:
         # Properties that can be adjusted by the user or class
         self.cmdline: list[str] = []
         self.efi: bool = False
+        self.ephemeral_initrd: bool = False
         self.gdb: bool = False
         self.gdb_bin: str = ''
         self.gh_json_file: Path = utils.UNINIT_PATH
@@ -176,14 +177,17 @@ class QEMURunner:
         return os.access('/dev/kvm', os.R_OK | os.W_OK)
 
     def _prepare_initrd(self) -> Path:
-        if self.initrd != utils.UNINIT_PATH:
-            return self.initrd
-        if not self._initrd_arch:
-            msg = 'No initrd architecture specified?'
-            raise RuntimeError(msg)
-        return utils.prepare_initrd(
-            self._initrd_arch, gh_json_file=self.gh_json_file, modules=self.modules
-        )
+        if self.initrd == utils.UNINIT_PATH:
+            if not self._initrd_arch:
+                msg = 'No initrd architecture specified?'
+                raise RuntimeError(msg)
+            self.initrd = utils.prepare_initrd(
+                self._initrd_arch,
+                gh_json_file=self.gh_json_file,
+                modules=self.modules,
+                ephemeral=self.ephemeral_initrd,
+            )
+        return self.initrd
 
     def _run_fg(self) -> None:
         # Pretty print and run QEMU command
@@ -207,6 +211,9 @@ class QEMURunner:
             else:
                 utils.red("ERROR: QEMU did not exit cleanly!")
             sys.exit(err.returncode)
+        finally:
+            if self.ephemeral_initrd:
+                self.initrd.unlink()
 
     def _run_gdb(self) -> None:
         qemu_cmd = [self._qemu_path, *self._qemu_args]
@@ -251,6 +258,8 @@ class QEMURunner:
 
             answer = input('Re-run QEMU + gdb [y/n] ')
             if answer.lower() == 'n':
+                if self.ephemeral_initrd:
+                    self.initrd.unlink()
                 break
 
     def _set_kernel_vars(self) -> None:
@@ -785,6 +794,7 @@ def guess_arch(kernel_arg: Path) -> str:
 
 def parse_arguments():
     parser = ArgumentParser(description='Boot a Linux kernel in QEMU')
+    initrd_group = parser.add_mutually_exclusive_group()
 
     parser.add_argument(
         '-a',
@@ -794,6 +804,11 @@ def parse_arguments():
         metavar='ARCH',
     )
     parser.add_argument('--efi', action='store_true', help='Boot kernel via UEFI (x86_64 only)')
+    initrd_group.add_argument(
+        '--ephemeral-initrd',
+        action='store_true',
+        help='Extract compressed initrd to a randomized name and clean up after booting (default: extract compressed initrd to a consistent path)',
+    )
     parser.add_argument(
         '-g',
         '--gdb',
@@ -809,7 +824,7 @@ def parse_arguments():
         '--gh-json-file',
         help='Use file for downloading rootfs images, instead of querying GitHub API directly',
     )
-    parser.add_argument(
+    initrd_group.add_argument(
         '-I',
         '--initrd',
         help='Initial ramdisk to use (default: Download ramdisk from ClangBuiltLinux/boot-utils releases)',
@@ -940,6 +955,7 @@ def main():
     if args.smp:
         runner.smp = args.smp
 
+    runner.ephemeral_initrd = args.ephemeral_initrd
     runner.interactive = args.interactive
     runner.timeout = args.timeout
 

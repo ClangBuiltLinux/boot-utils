@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NoReturn
 
@@ -185,6 +186,7 @@ def prepare_initrd(
     rootfs_format: str = 'cpio',
     gh_json_file: Path | None = None,
     modules: Path | None = None,
+    ephemeral: bool = False,
 ) -> Path:
     """
     Returns a decompressed initial ramdisk.
@@ -236,7 +238,13 @@ def prepare_initrd(
             download_initrd(gh_json_rel, src)
 
     check_cmd('zstd')
-    (dst := src.with_suffix('')).unlink(missing_ok=True)
+    if ephemeral:
+        fd, tmp_path = tempfile.mkstemp(dir=src.parent, text=True, suffix=f".{rootfs_format}")
+        os.close(fd)  # we don't need this
+        dst = Path(tmp_path)
+    else:
+        dst = src.with_suffix('')
+    dst.unlink(missing_ok=True)
     subprocess.run(['zstd', '-d', src, '-o', dst, '-q'], check=True)
 
     if modules and modules != UNINIT_PATH:
@@ -247,7 +255,8 @@ def prepare_initrd(
                 msg = f"{modules} does not have cpio magic bytes, was it generated with the 'modules-cpio-pkg' target?"
                 raise RuntimeError(msg)
 
-        (new_dst := dst.parent.joinpath('rootfs-modules.cpio')).unlink(missing_ok=True)
+        new_dst = dst.parent.joinpath(f"{dst.with_suffix('').name}-modules.cpio")
+        new_dst.unlink(missing_ok=True)
         with (
             subprocess.Popen(
                 ['cat', dst, modules], stdout=subprocess.PIPE, stderr=subprocess.STDOUT
@@ -258,6 +267,8 @@ def prepare_initrd(
                 msg = 'cat stdout is None?'
                 raise RuntimeError(msg)
             dst_file.write(proc.stdout.read())
+        if ephemeral:
+            dst.unlink()
         dst = new_dst
 
     return dst
